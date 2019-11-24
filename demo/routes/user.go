@@ -1,28 +1,27 @@
 package routes
 
 import (
-	"io"
 	"log"
 	"net/http"
 
 	"github.com/soongo/soon"
 )
 
-var UserRouter = soon.NewRouter()
+var UserRouter = &soon.Router{Sensitive: true, Strict: true}
 
-func userRouterMiddleware(w http.ResponseWriter, req *http.Request, next func()) {
+func userRouterMiddleware(res *soon.Response, req *http.Request, next func()) {
 	log.Println("[user router middleware] start")
 	next()
 	log.Println("[user router middleware] end")
 }
 
-func userIndexHandler(w http.ResponseWriter, r *http.Request, next func()) {
+func userIndexHandler(res *soon.Response, req *http.Request, next func()) {
 	log.Println("start user index route")
-	_, _ = io.WriteString(w, "user router")
+	_ = res.Send("user router")
 	log.Println("end user index route")
 }
 
 func init() {
 	UserRouter.Use(userRouterMiddleware)
-	UserRouter.Get("/", userIndexHandler)
+	UserRouter.GET("/Hello/", userIndexHandler)
 }

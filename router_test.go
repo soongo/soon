@@ -6,7 +6,6 @@ package soon
 
 import (
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -16,7 +15,6 @@ import (
 type header map[string]string
 
 type test struct {
-	name       string
 	route      string
 	path       string
 	statusCode int
@@ -37,15 +35,17 @@ var methods = []string{
 }
 
 func makeHandle(t test) Handle {
-	return func(w http.ResponseWriter, r *http.Request, next func()) {
+	return func(res *Response, r *http.Request, next func()) {
 		for k, v := range t.header {
-			w.Header().Set(k, v)
+			res.Header().Set(k, v)
 		}
 		if t.statusCode != 0 {
-			w.WriteHeader(t.statusCode)
+			res.WriteHeader(t.statusCode)
 		}
 		if t.body != "" {
-			_, _ = io.WriteString(w, t.body)
+			if err := res.Send(t.body); err != nil {
+				panic(err)
+			}
 		}
 	}
 }
@@ -82,47 +82,41 @@ func getWantStatusCode(statusCode int) int {
 	return statusCode
 }
 
-func notFound(w http.ResponseWriter, r *http.Request, next func()) {
-	http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+func notFound(res *Response, r *http.Request, next func()) {
+	http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 }
 
-func TestRouterWithTrailingSlashPolicyStatic(t *testing.T) {
+func TestRouterWithDefaultOptions(t *testing.T) {
 	tests := []test{
-		{name: "route-with-slash-1", route: "/", path: "/", body: "root page"},
-		{name: "route-with-slash-2", route: "/", path: "", statusCode: http.StatusOK,
-			body: "root page"},
-		{name: "route-with-slash-3", route: "//", path: "/", body: "root page"},
-		{name: "route-with-slash-4", route: "//", path: "//", body: "root page"},
-		{name: "route-with-slash-5", route: "//", path: "///",
-			statusCode: http.StatusNotFound, body: system404Body},
+		{route: "/", path: "/", body: "root page"},
+		{route: "/", path: "", statusCode: http.StatusOK, body: "root page"},
+		{route: "//", path: "/", statusCode: http.StatusNotFound, body: system404Body},
+		{route: "//", path: "//", body: "root page"},
+		{route: "//", path: "///", statusCode: http.StatusNotFound, body: system404Body},
 
-		{name: "route-without-slash-1", route: "", path: "/", body: "root page"},
-		{name: "route-without-slash-2", route: "", path: "", body: "root page"},
+		{route: "", path: "/", body: "root page"},
+		{route: "", path: "", body: "root page"},
 
-		{name: "sub-route-with-slash-1", route: "/health-check/", path: "/health-check/",
-			statusCode: http.StatusOK, header: header{"Content-Type": "application/json"},
-			body: `{"alive": true}`},
-		{name: "sub-route-with-slash-2", route: "/health-check/", path: "/health-check",
-			statusCode: http.StatusOK, body: `{"alive": true}`},
-		{name: "sub-route-with-slash-3", route: "/health-check//", path: "/health-check/",
+		{route: "/health-check/", path: "/health-check/", statusCode: http.StatusOK,
 			header: header{"Content-Type": "application/json"}, body: `{"alive": true}`},
-		{name: "sub-route-with-slash-4", route: "/health-check//", path: "/health-check//",
-			body: `{"alive": true}`},
-		{name: "sub-route-with-slash-5", route: "/health-check//", path: "/health-check///",
-			statusCode: http.StatusNotFound, body: system404Body},
+		{route: "/health-check/", path: "/health-check", statusCode: http.StatusNotFound,
+			body: system404Body},
+		{route: "/health-check//", path: "/health-check/", statusCode: http.StatusNotFound,
+			body: system404Body},
+		{route: "/health-check//", path: "/health-check//", body: `{"alive": true}`},
+		{route: "/health-check//", path: "/health-check///", statusCode: http.StatusNotFound,
+			body: system404Body},
 
-		{name: "sub-route-without-slash-1", route: "/health-check", path: "/health-check/",
-			body: `{"alive": true}`},
-		{name: "sub-route-without-slash-2", route: "/health-check", path: "/health-check",
-			body: `{"alive": true}`},
+		{route: "/health-check", path: "/health-check/", body: `{"alive": true}`},
+		{route: "/health-check", path: "/health-check", body: `{"alive": true}`},
 	}
 
 	t.Run("one-by-one", func(t *testing.T) {
 		for _, tt := range tests {
 			tt := tt
-			t.Run(tt.name, func(t *testing.T) {
+			t.Run("", func(t *testing.T) {
 				router := NewRouter()
-				router.Get(tt.route, makeHandle(tt))
+				router.GET(tt.route, makeHandle(tt))
 				server := httptest.NewServer(router)
 				defer server.Close()
 
@@ -158,16 +152,40 @@ func TestRouterWithTrailingSlashPolicyStatic(t *testing.T) {
 		}
 	})
 
+	tests = []test{
+		{route: "/", path: "/", body: "root page"},
+		{route: "/", path: "", statusCode: http.StatusOK, body: "root page"},
+		{route: "//", path: "/", statusCode: http.StatusOK, body: "root page"},
+		{route: "//", path: "//", body: "root page"},
+		{route: "//", path: "///", statusCode: http.StatusOK, body: "root page"},
+
+		{route: "", path: "/", body: "root page"},
+		{route: "", path: "", body: "root page"},
+
+		{route: "/health-check/", path: "/health-check/", statusCode: http.StatusOK,
+			header: header{"Content-Type": "application/json"}, body: `{"alive": true}`},
+		{route: "/health-check/", path: "/health-check", statusCode: http.StatusOK,
+			body: `{"alive": true}`},
+		{route: "/health-check//", path: "/health-check/", statusCode: http.StatusOK,
+			body: `{"alive": true}`},
+		{route: "/health-check//", path: "/health-check//", body: `{"alive": true}`},
+		{route: "/health-check//", path: "/health-check///", statusCode: http.StatusOK,
+			body: `{"alive": true}`},
+
+		{route: "/health-check", path: "/health-check/", body: `{"alive": true}`},
+		{route: "/health-check", path: "/health-check", body: `{"alive": true}`},
+	}
+
 	t.Run("all", func(t *testing.T) {
 		router := NewRouter()
 		for _, tt := range tests {
-			router.Get(tt.route, makeHandle(tt))
+			router.GET(tt.route, makeHandle(tt))
 		}
 		server := httptest.NewServer(router)
 		defer server.Close()
 
 		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
+			t.Run("", func(t *testing.T) {
 				statusCode, header, body, err := request(http.MethodGet, server.URL+tt.path)
 				if err != nil {
 					t.Error(err)
@@ -194,41 +212,34 @@ func TestRouterWithTrailingSlashPolicyStatic(t *testing.T) {
 
 func TestRouterWithTrailingSlashPolicyNone(t *testing.T) {
 	tests := []test{
-		{name: "route-with-slash-1", route: "/", path: "/", body: "root page"},
-		{name: "route-with-slash-2", route: "/", path: "", body: "root page"},
-		{name: "route-with-slash-3", route: "//", path: "/", statusCode: http.StatusNotFound,
+		{route: "/", path: "/", body: "root page"},
+		{route: "/", path: "", body: "root page"},
+		{route: "//", path: "/", statusCode: http.StatusNotFound, body: system404Body},
+		{route: "//", path: "", statusCode: http.StatusNotFound, body: system404Body},
+
+		{route: "", path: "/", body: "root page"},
+		{route: "", path: "", body: "root page"},
+		{route: "//", path: "/", statusCode: http.StatusNotFound, body: system404Body},
+		{route: "//", path: "", statusCode: http.StatusNotFound, body: system404Body},
+
+		{route: "/health-check/", path: "/health-check/", body: `{"alive": true}`},
+		{route: "/health-check/", path: "/health-check", statusCode: http.StatusNotFound,
 			body: system404Body},
-		{name: "route-with-slash-4", route: "//", path: "", statusCode: http.StatusNotFound,
+		{route: "/health-check//", path: "/health-check/", statusCode: http.StatusNotFound,
+			body: system404Body},
+		{route: "/health-check//", path: "/health-check", statusCode: http.StatusNotFound,
 			body: system404Body},
 
-		{name: "route-without-slash-1", route: "", path: "/", body: "root page"},
-		{name: "route-without-slash-2", route: "", path: "", body: "root page"},
-		{name: "route-without-slash-3", route: "//", path: "/", statusCode: http.StatusNotFound,
+		{route: "/health-check", path: "/health-check/", statusCode: http.StatusNotFound,
 			body: system404Body},
-		{name: "route-without-slash-4", route: "//", path: "", statusCode: http.StatusNotFound,
-			body: system404Body},
-
-		{name: "sub-route-with-slash-1", route: "/health-check/", path: "/health-check/",
-			body: `{"alive": true}`},
-		{name: "sub-route-with-slash-2", route: "/health-check/", path: "/health-check",
-			statusCode: http.StatusNotFound, body: system404Body},
-		{name: "sub-route-with-slash-3", route: "/health-check//", path: "/health-check/",
-			statusCode: http.StatusNotFound, body: system404Body},
-		{name: "sub-route-with-slash-4", route: "/health-check//", path: "/health-check",
-			statusCode: http.StatusNotFound, body: system404Body},
-
-		{name: "sub-route-without-slash-1", route: "/health-check", path: "/health-check/",
-			statusCode: http.StatusNotFound, body: system404Body},
-		{name: "sub-route-without-slash-2", route: "/health-check", path: "/health-check",
-			body: `{"alive": true}`},
+		{route: "/health-check", path: "/health-check", body: `{"alive": true}`},
 	}
 
 	for _, tt := range tests {
 		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run("", func(t *testing.T) {
 			router := NewRouter()
-			router.TrailingSlashPolicy = TrailingSlashPolicyNone
-			router.Get(tt.route, makeHandle(tt))
+			router.GET(tt.route, makeHandle(tt))
 			server := httptest.NewServer(router)
 			defer server.Close()
 
@@ -251,16 +262,16 @@ func TestRouterWithTrailingSlashPolicyNone(t *testing.T) {
 
 func TestRouterWithCustomNotFound(t *testing.T) {
 	tests := []test{
-		{name: "route-1", route: "/", path: "/", body: "root page"},
-		{name: "route-2", route: "/", path: "/404", statusCode: http.StatusNotFound,
+		{route: "/", path: "/", body: "root page"},
+		{route: "/", path: "/404", statusCode: http.StatusNotFound,
 			body: fmt.Sprintln(http.StatusText(http.StatusNotFound))},
 	}
 
 	for _, tt := range tests {
 		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run("", func(t *testing.T) {
 			router := NewRouter()
-			router.Get(tt.route, makeHandle(tt))
+			router.GET(tt.route, makeHandle(tt))
 			router.Use(notFound)
 			server := httptest.NewServer(router)
 			defer server.Close()
@@ -286,10 +297,12 @@ func TestRouterMiddleware(t *testing.T) {
 	test := test{route: "/", path: "/", body: "root page"}
 	middlewareBody := "middleware"
 	router := NewRouter()
-	router.Use(func(w http.ResponseWriter, req *http.Request, next func()) {
-		_, _ = io.WriteString(w, middlewareBody)
+	router.Use(func(res *Response, req *http.Request, next func()) {
+		if err := res.Send(middlewareBody); err != nil {
+			panic(err)
+		}
 	})
-	router.Get(test.route, makeHandle(test))
+	router.GET(test.route, makeHandle(test))
 	server := httptest.NewServer(router)
 	defer server.Close()
 
@@ -349,7 +362,7 @@ func TestRouterMethods(t *testing.T) {
 func TestRouterAll(t *testing.T) {
 	test := test{route: "/", path: "/", body: "root page"}
 	router := NewRouter()
-	router.All(test.route, makeHandle(test))
+	router.ALL(test.route, makeHandle(test))
 	server := httptest.NewServer(router)
 	defer server.Close()
 

@@ -6,52 +6,50 @@ package soon
 
 import (
 	"net/http"
-	"path"
-)
 
-type TrailingSlashPolicy int
+	"github.com/dlclark/regexp2"
+	pathToRegexp "github.com/soongo/path-to-regexp"
+)
 
 type node struct {
 	method       string
 	route        string
+	regexp       *regexp2.Regexp
 	isMiddleware bool
 	handle       Handle
+	options      *pathToRegexp.Options
 }
 
-type Handle func(http.ResponseWriter, *http.Request, func())
+func (n *node) match(path string) bool {
+	m, err := n.regexp.MatchString(path)
+	if err != nil {
+		panic(err)
+	}
+	return m
+}
+
+type Handle func(*Response, *http.Request, func())
 
 type Router struct {
 	routes []*node
 
-	// How to handle the trailing slash in URL
-	// TrailingSlashPolicyStatic (default) or TrailingSlashPolicyRedirect
-	// or TrailingSlashPolicyNone
-	TrailingSlashPolicy TrailingSlashPolicy
+	// When true the regexp will be case sensitive. (default: false)
+	Sensitive bool
+
+	// When true the regexp allows an optional trailing delimiter to match. (default: false)
+	Strict bool
+
+	options *pathToRegexp.Options
 
 	// Function to handle panics recovered from http handlers.
 	// It should be used to generate a error page and return the http error code
 	// 500 (Internal Server Error).
 	// The handle can be used to keep your server from crashing because of
 	// unrecovered panics.
-	PanicHandler func(http.ResponseWriter, *http.Request, interface{})
+	panicHandler func(*Response, *http.Request, interface{})
 }
 
 const (
-	// Enables automatic use similar route if the current route can't be
-	// matched but a handle for the path with (without) the trailing slash exists.
-	// For example if /foo/ is requested but a route only exists for /foo,
-	// the handler for /foo will be used to handle /foo/ as well.
-	TrailingSlashPolicyStatic = TrailingSlashPolicy(iota)
-
-	// Enables automatic redirection if the current route can't be matched but a
-	// handle for the path with (without) the trailing slash exists.
-	// For example if /foo/ is requested but a route only exists for /foo, the
-	// client is redirected to /foo with http status code 301.
-	TrailingSlashPolicyRedirect
-
-	// Disable automatic handle the trailing slash in URL.
-	TrailingSlashPolicyNone
-
 	HTTPMethodAll = "ALL"
 )
 
@@ -69,84 +67,147 @@ func defaultPanic(w http.ResponseWriter, _ *http.Request, v interface{}) {
 }
 
 func NewRouter() *Router {
-	return &Router{TrailingSlashPolicy: TrailingSlashPolicyStatic}
+	return &Router{}
 }
 
 func (r *Router) hasRoute(method, route string) bool {
 	for _, v := range r.routes {
-		if !v.isMiddleware && v.method == method && v.route == route {
+		if !v.isMiddleware && v.method == method && v.match(route) {
 			return true
 		}
 	}
 	return false
 }
 
-func (r *Router) recv(w http.ResponseWriter, req *http.Request) {
-	if rcv := recover(); rcv != nil {
-		if r.PanicHandler != nil {
-			r.PanicHandler(w, req, rcv)
-			return
+func (r *Router) initOptions() {
+	if r.options == nil {
+		r.options = &pathToRegexp.Options{
+			Sensitive: r.Sensitive,
+			Strict:    r.Strict,
 		}
-		defaultPanic(w, req, rcv)
 	}
 }
 
-func (r *Router) Use(middleware Handle) {
+func (r *Router) recv(res *Response, req *http.Request) {
+	if rcv := recover(); rcv != nil {
+		if r.panicHandler != nil {
+			r.panicHandler(res, req, rcv)
+			return
+		}
+		defaultPanic(res, req, rcv)
+	}
+}
+
+func (r *Router) Use(params ...interface{}) {
+	length := len(params)
+	if length == 2 {
+		if route, ok := params[0].(string); ok {
+			if router, ok := params[1].(*Router); ok {
+				r.mount(route, router)
+				return
+			} else if middleware, ok := params[1].(func(*Response, *http.Request, func())); ok {
+				r.useMiddleware(route, middleware)
+				return
+			}
+			panic("second param should be middleware function or Router")
+		}
+		panic("route should be string")
+	}
+
+	if length == 1 {
+		if middleware, ok := params[0].(func(*Response, *http.Request, func())); ok {
+			r.useMiddleware("/", middleware)
+			return
+		}
+
+		if router, ok := params[0].(*Router); ok {
+			r.mount("/", router)
+			return
+		}
+
+		panic("params should be middleware function or Router")
+	}
+
+	panic("params count should be 1 or 2")
+}
+
+func (r *Router) useMiddleware(route string, middleware Handle) {
+	r.initOptions()
+	route = routeJoin(route, "/(.*)")
+	regexp := pathToRegexp.Must(pathToRegexp.PathToRegexp(route, nil, r.options))
 	r.routes = append(r.routes, &node{
-		route:        "/",
+		route:        route,
+		regexp:       regexp,
 		isMiddleware: true,
 		handle:       middleware,
+		options:      r.options,
 	})
 }
 
-func (r *Router) Get(route string, handle Handle) {
+func (r *Router) mount(mountPoint string, router *Router) {
+	for _, v := range router.routes {
+		route := routeJoin(mountPoint, v.route)
+		regexp := pathToRegexp.Must(pathToRegexp.PathToRegexp(route, nil, v.options))
+		r.routes = append(r.routes, &node{
+			method:       v.method,
+			route:        route,
+			regexp:       regexp,
+			isMiddleware: v.isMiddleware,
+			handle:       v.handle,
+			options:      v.options,
+		})
+	}
+}
+
+func (r *Router) GET(route string, handle Handle) {
 	r.Handle(http.MethodGet, route, handle)
 }
 
-func (r *Router) Head(route string, handle Handle) {
+func (r *Router) HEAD(route string, handle Handle) {
 	r.Handle(http.MethodHead, route, handle)
 }
 
-func (r *Router) Post(route string, handle Handle) {
+func (r *Router) POST(route string, handle Handle) {
 	r.Handle(http.MethodPost, route, handle)
 }
 
-func (r *Router) Put(route string, handle Handle) {
+func (r *Router) PUT(route string, handle Handle) {
 	r.Handle(http.MethodPut, route, handle)
 }
 
-func (r *Router) Patch(route string, handle Handle) {
+func (r *Router) PATCH(route string, handle Handle) {
 	r.Handle(http.MethodPatch, route, handle)
 }
 
-func (r *Router) Delete(route string, handle Handle) {
+func (r *Router) DELETE(route string, handle Handle) {
 	r.Handle(http.MethodDelete, route, handle)
 }
 
-func (r *Router) Options(route string, handle Handle) {
+func (r *Router) OPTIONS(route string, handle Handle) {
 	r.Handle(http.MethodOptions, route, handle)
 }
 
-func (r *Router) All(route string, handle Handle) {
-	r.routes = append(r.routes, &node{
-		method:       HTTPMethodAll,
-		route:        addPrefixSlash(route),
-		isMiddleware: false,
-		handle:       handle,
-	})
+func (r *Router) ALL(route string, handle Handle) {
+	r.Handle(HTTPMethodAll, route, handle)
 }
 
 func (r *Router) Handle(method, route string, handle Handle) {
+	r.initOptions()
+	route = addPrefixSlash(route)
+	regexp := pathToRegexp.Must(pathToRegexp.PathToRegexp(route, nil, r.options))
 	r.routes = append(r.routes, &node{
 		method:       method,
-		route:        addPrefixSlash(route),
+		route:        route,
+		regexp:       regexp,
 		isMiddleware: false,
 		handle:       handle,
+		options:      r.options,
 	})
 }
 
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	defer r.recv(w, req)
+	res := &Response{w}
+	defer r.recv(res, req)
 
 	i, urlPath := -1, req.URL.Path
 	var next func()
@@ -157,35 +218,9 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 
 		node := r.routes[i]
-		if (node.isMiddleware && isAncestor(node.route, urlPath)) || (node.route ==
-			urlPath && (node.method == HTTPMethodAll || node.method == req.Method)) {
-			node.handle(w, req, next)
-			return
-		}
-
-		if node.method != req.Method || r.TrailingSlashPolicy == TrailingSlashPolicyNone {
-			next()
-			return
-		}
-
-		if similar(node.route, urlPath) {
-			if r.hasRoute(node.method, urlPath) {
-				next()
-				return
-			}
-
-			if r.TrailingSlashPolicy == TrailingSlashPolicyRedirect {
-				p := path.Clean(node.route)
-				if similar(urlPath, p) && !r.hasRoute(node.method, p) {
-					next()
-					return
-				}
-				req.URL.Path = node.route
-				http.Redirect(w, req, req.URL.String(), http.StatusMovedPermanently)
-				return
-			}
-
-			node.handle(w, req, next)
+		if node.match(urlPath) && (node.isMiddleware ||
+			node.method == HTTPMethodAll || node.method == req.Method) {
+			node.handle(res, req, next)
 			return
 		}
 
