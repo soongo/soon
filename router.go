@@ -28,8 +28,12 @@ func (n *node) match(path string) bool {
 	return m
 }
 
-type Handle func(*Response, *http.Request, func())
+// Handle is the handler function of router, router use it to handle matched
+// http request, and dispatch req, res into the handler.
+type Handle func(*http.Request, *Response, func())
 
+// Router is a http.Handler which can be used to dispatch requests to different
+// handler functions
 type Router struct {
 	routes []*node
 
@@ -46,16 +50,17 @@ type Router struct {
 	// 500 (Internal Server Error).
 	// The handle can be used to keep your server from crashing because of
 	// unrecovered panics.
-	panicHandler func(*Response, *http.Request, interface{})
+	panicHandler func(*http.Request, *Response, interface{})
 }
 
 const (
+	// HTTPMethodAll means any http method.
 	HTTPMethodAll = "ALL"
 )
 
 var _ http.Handler = NewRouter()
 
-func defaultPanic(w http.ResponseWriter, _ *http.Request, v interface{}) {
+func defaultPanic(_ *http.Request, w http.ResponseWriter, v interface{}) {
 	text := http.StatusText(http.StatusInternalServerError)
 	switch err := v.(type) {
 	case error:
@@ -66,6 +71,8 @@ func defaultPanic(w http.ResponseWriter, _ *http.Request, v interface{}) {
 	http.Error(w, text, http.StatusInternalServerError)
 }
 
+// NewRouter returns a new initialized Router with default configuration.
+// Sensitive and Strict is false by default.
 func NewRouter() *Router {
 	return &Router{}
 }
@@ -88,16 +95,18 @@ func (r *Router) initOptions() {
 	}
 }
 
-func (r *Router) recv(res *Response, req *http.Request) {
+func (r *Router) recv(req *http.Request, res *Response) {
 	if rcv := recover(); rcv != nil {
 		if r.panicHandler != nil {
-			r.panicHandler(res, req, rcv)
+			r.panicHandler(req, res, rcv)
 			return
 		}
-		defaultPanic(res, req, rcv)
+		defaultPanic(req, res, rcv)
 	}
 }
 
+// Use the given middleware function, or mount another router,
+// with optional path, defaulting to "/".
 func (r *Router) Use(params ...interface{}) {
 	length := len(params)
 	if length == 2 {
@@ -105,7 +114,7 @@ func (r *Router) Use(params ...interface{}) {
 			if router, ok := params[1].(*Router); ok {
 				r.mount(route, router)
 				return
-			} else if middleware, ok := params[1].(func(*Response, *http.Request, func())); ok {
+			} else if middleware, ok := params[1].(func(*http.Request, *Response, func())); ok {
 				r.useMiddleware(route, middleware)
 				return
 			}
@@ -115,13 +124,13 @@ func (r *Router) Use(params ...interface{}) {
 	}
 
 	if length == 1 {
-		if middleware, ok := params[0].(func(*Response, *http.Request, func())); ok {
-			r.useMiddleware("/", middleware)
+		if router, ok := params[0].(*Router); ok {
+			r.mount("/", router)
 			return
 		}
 
-		if router, ok := params[0].(*Router); ok {
-			r.mount("/", router)
+		if middleware, ok := params[0].(func(*http.Request, *Response, func())); ok {
+			r.useMiddleware("/", middleware)
 			return
 		}
 
@@ -159,38 +168,49 @@ func (r *Router) mount(mountPoint string, router *Router) {
 	}
 }
 
+// GET is a shortcut for router.Handle(http.MethodGet, route, handle)
 func (r *Router) GET(route string, handle Handle) {
 	r.Handle(http.MethodGet, route, handle)
 }
 
+// HEAD is a shortcut for router.Handle(http.MethodHead, route, handle)
 func (r *Router) HEAD(route string, handle Handle) {
 	r.Handle(http.MethodHead, route, handle)
 }
 
+// POST is a shortcut for router.Handle(http.MethodPost, route, handle)
 func (r *Router) POST(route string, handle Handle) {
 	r.Handle(http.MethodPost, route, handle)
 }
 
+// PUT is a shortcut for router.Handle(http.MethodPut, route, handle)
 func (r *Router) PUT(route string, handle Handle) {
 	r.Handle(http.MethodPut, route, handle)
 }
 
+// PATCH is a shortcut for router.Handle(http.MethodPatch, route, handle)
 func (r *Router) PATCH(route string, handle Handle) {
 	r.Handle(http.MethodPatch, route, handle)
 }
 
+// DELETE is a shortcut for router.Handle(http.MethodDelete, route, handle)
 func (r *Router) DELETE(route string, handle Handle) {
 	r.Handle(http.MethodDelete, route, handle)
 }
 
+// OPTIONS is a shortcut for router.Handle(http.MethodOptions, route, handle)
 func (r *Router) OPTIONS(route string, handle Handle) {
 	r.Handle(http.MethodOptions, route, handle)
 }
 
+// ALL means any http method, so this is a shortcut for
+// router.Handle(http.MethodAny, route, handle)
 func (r *Router) ALL(route string, handle Handle) {
 	r.Handle(HTTPMethodAll, route, handle)
 }
 
+// Handle registers the handler for the http request which matched the method and route.
+// And dispatch a req, res into the handler.
 func (r *Router) Handle(method, route string, handle Handle) {
 	r.initOptions()
 	route = addPrefixSlash(route)
@@ -205,9 +225,11 @@ func (r *Router) Handle(method, route string, handle Handle) {
 	})
 }
 
+// ServeHTTP writes reply headers and data to the ResponseWriter and then return.
+// Router implements the interface http.Handler.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	res := &Response{w}
-	defer r.recv(res, req)
+	defer r.recv(req, res)
 
 	i, urlPath := -1, req.URL.Path
 	var next func()
@@ -220,7 +242,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		node := r.routes[i]
 		if node.match(urlPath) && (node.isMiddleware ||
 			node.method == HTTPMethodAll || node.method == req.Method) {
-			node.handle(res, req, next)
+			node.handle(req, res, next)
 			return
 		}
 

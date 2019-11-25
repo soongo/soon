@@ -9,10 +9,12 @@ import (
 	"net/http"
 )
 
+// Response is a custom http.ResponseWriter implementation.
 type Response struct {
 	http.ResponseWriter
 }
 
+// Send sends string body
 func (r *Response) Send(s string) error {
 	_, err := io.WriteString(r, s)
 	return err
