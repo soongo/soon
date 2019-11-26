@@ -35,7 +35,7 @@ var methods = []string{
 }
 
 func makeHandle(t test) Handle {
-	return func(req *http.Request, res *Response, next func()) {
+	return func(req *Request, res *Response, next Next) {
 		for k, v := range t.header {
 			res.Header().Set(k, v)
 		}
@@ -82,7 +82,7 @@ func getWantStatusCode(statusCode int) int {
 	return statusCode
 }
 
-func notFound(req *http.Request, res *Response, next func()) {
+func notFound(req *Request, res *Response, next Next) {
 	http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 }
 
@@ -297,7 +297,7 @@ func TestRouterMiddleware(t *testing.T) {
 	test := test{route: "/", path: "/", body: "root page"}
 	middlewareBody := "middleware"
 	router := NewRouter()
-	router.Use(func(req *http.Request, res *Response, next func()) {
+	router.Use(func(req *Request, res *Response, next Next) {
 		if err := res.Send(middlewareBody); err != nil {
 			panic(err)
 		}

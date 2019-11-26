@@ -14,17 +14,32 @@ Soon is a web framework written in Go (Golang). It features an expressjs-like AP
 package main
 
 import (
-	"log"
-	"net/http"
-
 	"github.com/soongo/soon"
 )
 
+// an example middleware
+func logger(req *soon.Request, res *soon.Response, next soon.Next) {
+	// do something before
+	next(nil)
+	// do something after
+}
+
 func main() {
+	// soon.SetMode(soon.DebugMode) // enable soon framework debug mode
+
+	// Create an app with default router
 	app := soon.New()
-	app.GET("/", func(req *http.Request, res *soon.Response, next func()) {
+
+	app.Use(logger) // use middleware
+
+	app.GET("/", func(req *soon.Request, res *soon.Response, next soon.Next) {
 		res.Send("Hello World")
 	})
-	log.Fatal(http.ListenAndServe(":3000", app))
+
+	app.GET("/:foo", func(req *soon.Request, res *soon.Response, next soon.Next) {
+		res.Send(req.Params.Get("foo"))
+	})
+
+	app.Run() // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
 }
 ```

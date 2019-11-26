@@ -11,6 +11,12 @@ import (
 	pathToRegexp "github.com/soongo/path-to-regexp"
 )
 
+type Next func(v interface{})
+
+// Handle is the handler function of router, router use it to handle matched
+// http request, and dispatch req, res into the handler.
+type Handle func(*Request, *Response, Next)
+
 type node struct {
 	method       string
 	route        string
@@ -18,6 +24,26 @@ type node struct {
 	isMiddleware bool
 	handle       Handle
 	options      *pathToRegexp.Options
+	tokens       []pathToRegexp.Token
+}
+
+func (n *node) initRegexp() {
+	n.regexp = pathToRegexp.Must(pathToRegexp.PathToRegexp(n.route, &n.tokens, n.options))
+}
+
+func (n *node) buildRequestParams(req *Request) {
+	if len(n.tokens) > 0 {
+		req.resetParams()
+		match, err := n.regexp.FindStringMatch(req.URL.Path)
+		if err != nil {
+			panic(err)
+		}
+		for i, g := range match.Groups() {
+			if i > 0 {
+				req.Params.Set(n.tokens[i-1].Name, g.String())
+			}
+		}
+	}
 }
 
 func (n *node) match(path string) bool {
@@ -27,10 +53,6 @@ func (n *node) match(path string) bool {
 	}
 	return m
 }
-
-// Handle is the handler function of router, router use it to handle matched
-// http request, and dispatch req, res into the handler.
-type Handle func(*http.Request, *Response, func())
 
 // Router is a http.Handler which can be used to dispatch requests to different
 // handler functions
@@ -50,7 +72,7 @@ type Router struct {
 	// 500 (Internal Server Error).
 	// The handle can be used to keep your server from crashing because of
 	// unrecovered panics.
-	panicHandler func(*http.Request, *Response, interface{})
+	panicHandler func(*Request, *Response, interface{})
 }
 
 const (
@@ -60,7 +82,7 @@ const (
 
 var _ http.Handler = NewRouter()
 
-func defaultPanic(_ *http.Request, w http.ResponseWriter, v interface{}) {
+func defaultPanic(_ *Request, w http.ResponseWriter, v interface{}) {
 	text := http.StatusText(http.StatusInternalServerError)
 	switch err := v.(type) {
 	case error:
@@ -95,7 +117,7 @@ func (r *Router) initOptions() {
 	}
 }
 
-func (r *Router) recv(req *http.Request, res *Response) {
+func (r *Router) recv(req *Request, res *Response) {
 	if rcv := recover(); rcv != nil {
 		if r.panicHandler != nil {
 			r.panicHandler(req, res, rcv)
@@ -114,7 +136,7 @@ func (r *Router) Use(params ...interface{}) {
 			if router, ok := params[1].(*Router); ok {
 				r.mount(route, router)
 				return
-			} else if middleware, ok := params[1].(func(*http.Request, *Response, func())); ok {
+			} else if middleware, ok := params[1].(func(*Request, *Response, Next)); ok {
 				r.useMiddleware(route, middleware)
 				return
 			}
@@ -129,7 +151,7 @@ func (r *Router) Use(params ...interface{}) {
 			return
 		}
 
-		if middleware, ok := params[0].(func(*http.Request, *Response, func())); ok {
+		if middleware, ok := params[0].(func(*Request, *Response, Next)); ok {
 			r.useMiddleware("/", middleware)
 			return
 		}
@@ -143,28 +165,28 @@ func (r *Router) Use(params ...interface{}) {
 func (r *Router) useMiddleware(route string, middleware Handle) {
 	r.initOptions()
 	route = routeJoin(route, "/(.*)")
-	regexp := pathToRegexp.Must(pathToRegexp.PathToRegexp(route, nil, r.options))
-	r.routes = append(r.routes, &node{
+	node := &node{
 		route:        route,
-		regexp:       regexp,
 		isMiddleware: true,
 		handle:       middleware,
 		options:      r.options,
-	})
+	}
+	node.initRegexp()
+	r.routes = append(r.routes, node)
 }
 
 func (r *Router) mount(mountPoint string, router *Router) {
 	for _, v := range router.routes {
 		route := routeJoin(mountPoint, v.route)
-		regexp := pathToRegexp.Must(pathToRegexp.PathToRegexp(route, nil, v.options))
-		r.routes = append(r.routes, &node{
+		node := &node{
 			method:       v.method,
 			route:        route,
-			regexp:       regexp,
 			isMiddleware: v.isMiddleware,
 			handle:       v.handle,
 			options:      v.options,
-		})
+		}
+		node.initRegexp()
+		r.routes = append(r.routes, node)
 	}
 }
 
@@ -214,40 +236,41 @@ func (r *Router) ALL(route string, handle Handle) {
 func (r *Router) Handle(method, route string, handle Handle) {
 	r.initOptions()
 	route = addPrefixSlash(route)
-	regexp := pathToRegexp.Must(pathToRegexp.PathToRegexp(route, nil, r.options))
-	r.routes = append(r.routes, &node{
+	node := &node{
 		method:       method,
 		route:        route,
-		regexp:       regexp,
 		isMiddleware: false,
 		handle:       handle,
 		options:      r.options,
-	})
+	}
+	node.initRegexp()
+	r.routes = append(r.routes, node)
 }
 
 // ServeHTTP writes reply headers and data to the ResponseWriter and then return.
 // Router implements the interface http.Handler.
-func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	res := &Response{w}
+func (r *Router) ServeHTTP(w http.ResponseWriter, raw *http.Request) {
+	req, res := &Request{Request: raw}, &Response{w}
 	defer r.recv(req, res)
 
-	i, urlPath := -1, req.URL.Path
-	var next func()
-	next = func() {
+	i, urlPath := -1, raw.URL.Path
+	var next Next
+	next = func(v interface{}) {
 		if i++; i >= len(r.routes) {
-			http.NotFound(w, req)
+			http.NotFound(w, raw)
 			return
 		}
 
 		node := r.routes[i]
 		if node.match(urlPath) && (node.isMiddleware ||
-			node.method == HTTPMethodAll || node.method == req.Method) {
+			node.method == HTTPMethodAll || node.method == raw.Method) {
+			node.buildRequestParams(req)
 			node.handle(req, res, next)
 			return
 		}
 
-		next()
+		next(nil)
 	}
 
-	next()
+	next(nil)
 }
