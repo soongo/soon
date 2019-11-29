@@ -11,11 +11,15 @@ import (
 	pathToRegexp "github.com/soongo/path-to-regexp"
 )
 
-type Next func(v interface{})
+type Next func(v ...interface{})
 
 // Handle is the handler function of router, router use it to handle matched
 // http request, and dispatch req, res into the handler.
 type Handle func(*Request, *Response, Next)
+
+// ErrorHandle handles the error generated in route handler,
+// and dispatch error, req, res into the error handler.
+type ErrorHandle func(interface{}, *Request, *Response, Next)
 
 type node struct {
 	method       string
@@ -23,12 +27,14 @@ type node struct {
 	regexp       *regexp2.Regexp
 	isMiddleware bool
 	handle       Handle
+	errorHandle  ErrorHandle
 	options      *pathToRegexp.Options
 	tokens       []pathToRegexp.Token
 }
 
 func (n *node) initRegexp() {
-	n.regexp = pathToRegexp.Must(pathToRegexp.PathToRegexp(n.route, &n.tokens, n.options))
+	n.regexp = pathToRegexp.Must(pathToRegexp.PathToRegexp(
+		n.route, &n.tokens, n.options))
 }
 
 func (n *node) buildRequestParams(req *Request) {
@@ -54,6 +60,10 @@ func (n *node) match(path string) bool {
 	return m
 }
 
+func (n *node) isErrorHandler() bool {
+	return n.errorHandle != nil
+}
+
 // Router is a http.Handler which can be used to dispatch requests to different
 // handler functions
 type Router struct {
@@ -66,13 +76,6 @@ type Router struct {
 	Strict bool
 
 	options *pathToRegexp.Options
-
-	// Function to handle panics recovered from http handlers.
-	// It should be used to generate a error page and return the http error code
-	// 500 (Internal Server Error).
-	// The handle can be used to keep your server from crashing because of
-	// unrecovered panics.
-	panicHandler func(*Request, *Response, interface{})
 }
 
 const (
@@ -82,7 +85,8 @@ const (
 
 var _ http.Handler = NewRouter()
 
-func defaultPanic(_ *Request, w http.ResponseWriter, v interface{}) {
+// Function to handle error when no other error handlers.
+func defaultErrorHandler(v interface{}, _ *Request, w http.ResponseWriter) {
 	text := http.StatusText(http.StatusInternalServerError)
 	switch err := v.(type) {
 	case error:
@@ -117,59 +121,75 @@ func (r *Router) initOptions() {
 	}
 }
 
-func (r *Router) recv(req *Request, res *Response) {
+func (r *Router) recv(req *Request, res *Response, next Next) {
 	if rcv := recover(); rcv != nil {
-		if r.panicHandler != nil {
-			r.panicHandler(req, res, rcv)
-			return
-		}
-		defaultPanic(req, res, rcv)
+		next(rcv)
 	}
 }
 
-// Use the given middleware function, or mount another router,
+// Use the given middleware, or error handler, or mount another router,
 // with optional path, defaulting to "/".
 func (r *Router) Use(params ...interface{}) {
 	length := len(params)
+	if length > 2 || length == 0 {
+		panic("params count should be 1 or 2")
+	}
+
 	if length == 2 {
-		if route, ok := params[0].(string); ok {
-			if router, ok := params[1].(*Router); ok {
-				r.mount(route, router)
-				return
-			} else if middleware, ok := params[1].(func(*Request, *Response, Next)); ok {
-				r.useMiddleware(route, middleware)
-				return
-			}
-			panic("second param should be middleware function or Router")
+		if _, ok := params[0].(string); !ok {
+			panic("route should be string")
 		}
-		panic("route should be string")
 	}
 
-	if length == 1 {
-		if router, ok := params[0].(*Router); ok {
-			r.mount("/", router)
-			return
-		}
-
-		if middleware, ok := params[0].(func(*Request, *Response, Next)); ok {
-			r.useMiddleware("/", middleware)
-			return
-		}
-
-		panic("params should be middleware function or Router")
+	route := "/"
+	if v, ok := params[0].(string); ok {
+		route = v
 	}
 
-	panic("params count should be 1 or 2")
+	var handle interface{} = params[length-1]
+
+	if router, ok := handle.(*Router); ok {
+		r.mount(route, router)
+		return
+	}
+
+	if m, ok := handle.(func(*Request, *Response, Next)); ok {
+		r.useMiddleware(route, m)
+		return
+	}
+
+	if h, ok := handle.(func(interface{}, *Request, *Response, Next)); ok {
+		r.useErrorHandle(route, h)
+		return
+	}
+
+	msg := "params should be middleware or error handler or router"
+	if length == 2 {
+		msg = "second " + msg
+	}
+	panic(msg)
 }
 
-func (r *Router) useMiddleware(route string, middleware Handle) {
+func (r *Router) useMiddleware(route string, h Handle) {
 	r.initOptions()
 	route = routeJoin(route, "/(.*)")
 	node := &node{
 		route:        route,
 		isMiddleware: true,
-		handle:       middleware,
+		handle:       h,
 		options:      r.options,
+	}
+	node.initRegexp()
+	r.routes = append(r.routes, node)
+}
+
+func (r *Router) useErrorHandle(route string, h ErrorHandle) {
+	r.initOptions()
+	route = routeJoin(route, "/(.*)")
+	node := &node{
+		route:       route,
+		errorHandle: h,
+		options:     r.options,
 	}
 	node.initRegexp()
 	r.routes = append(r.routes, node)
@@ -183,6 +203,7 @@ func (r *Router) mount(mountPoint string, router *Router) {
 			route:        route,
 			isMiddleware: v.isMiddleware,
 			handle:       v.handle,
+			errorHandle:  v.errorHandle,
 			options:      v.options,
 		}
 		node.initRegexp()
@@ -251,26 +272,41 @@ func (r *Router) Handle(method, route string, handle Handle) {
 // Router implements the interface http.Handler.
 func (r *Router) ServeHTTP(w http.ResponseWriter, raw *http.Request) {
 	req, res := &Request{Request: raw}, &Response{w}
-	defer r.recv(req, res)
-
 	i, urlPath := -1, raw.URL.Path
 	var next Next
-	next = func(v interface{}) {
+	next = func(v ...interface{}) {
 		if i++; i >= len(r.routes) {
-			http.NotFound(w, raw)
+			if len(v) > 0 && v[0] != nil {
+				defaultErrorHandler(v[0], req, res)
+			} else {
+				http.NotFound(w, raw)
+			}
 			return
 		}
 
 		node := r.routes[i]
-		if node.match(urlPath) && (node.isMiddleware ||
-			node.method == HTTPMethodAll || node.method == raw.Method) {
-			node.buildRequestParams(req)
-			node.handle(req, res, next)
-			return
+		if node.match(urlPath) {
+			if len(v) > 0 && v[0] != nil {
+				if node.isErrorHandler() {
+					node.buildRequestParams(req)
+					node.errorHandle(v[0], req, res, next)
+					return
+				}
+				next(v[0])
+				return
+			}
+
+			if node.isMiddleware || node.method == HTTPMethodAll || node.method == raw.Method {
+				node.buildRequestParams(req)
+				node.handle(req, res, next)
+				return
+			}
 		}
 
-		next(nil)
+		next()
 	}
 
-	next(nil)
+	defer r.recv(req, res, next)
+
+	next()
 }

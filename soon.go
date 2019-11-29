@@ -16,12 +16,6 @@ func New() *App {
 	return &App{Router: NewRouter()}
 }
 
-// SetPanicHandler sets the panic handler to handle panics recovered from
-// http handlers.
-func (app *App) SetPanicHandler(h func(*Request, *Response, interface{})) {
-	app.panicHandler = h
-}
-
 // Run attaches the router to a http.Server and starts listening and serving HTTP requests.
 // It is a shortcut for http.ListenAndServe(addr, app)
 func (app *App) Run(addr ...string) error {

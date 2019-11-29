@@ -20,7 +20,7 @@ import (
 // an example middleware
 func logger(req *soon.Request, res *soon.Response, next soon.Next) {
 	// do something before
-	next(nil)
+	next()
 	// do something after
 }
 
@@ -38,6 +38,19 @@ func main() {
 
 	app.GET("/:foo", func(req *soon.Request, res *soon.Response, next soon.Next) {
 		res.Send(req.Params.Get("foo"))
+	})
+
+	// an example error handler
+	app.Use(func(v interface{}, req *soon.Request, res *soon.Response, next soon.Next) {
+		msg := "Internal Server Error"
+		switch err := v.(type) {
+		case error:
+			msg = err.Error()
+		case string:
+			msg = err
+		}
+		res.WriteHeader(500)
+		res.Send(msg)
 	})
 
 	app.Run() // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
