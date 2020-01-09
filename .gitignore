@@ -15,4 +15,6 @@ _test
 *.prof
 
 *.swp
+vendor/*
+!vendor/vendor.json
 examples

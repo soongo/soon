@@ -8,7 +8,7 @@ import (
 	"net/http"
 
 	"github.com/dlclark/regexp2"
-	pathToRegexp "github.com/soongo/path-to-regexp"
+	pathToRegexp "github.com/soongo/path-to-regexp/v5"
 )
 
 type Next func(v ...interface{})
