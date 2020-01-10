@@ -8,6 +8,16 @@
 
 Soon is a web framework written in Go (Golang). It features an expressjs-like API.
 
+## Installation
+
+To install `Soon`, you need to install Go and set your Go workspace first.
+
+The first need [Go](https://golang.org/) installed (**version 1.11+ is required**), then you can use the below Go command to install `Soon`.
+
+```sh
+$ go get -u github.com/soongo/soon
+```
+
 ## Quick Start
 
 ```go
