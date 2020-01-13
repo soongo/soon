@@ -4,7 +4,11 @@
 
 package soon
 
-import "net/http"
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+)
 
 // Params contains all matched url params
 type Params map[interface{}]string
@@ -17,6 +21,14 @@ func (p Params) Get(k interface{}) string {
 // Set one param with key
 func (p Params) Set(k interface{}, v string) {
 	p[k] = v
+}
+
+func (p Params) MarshalJSON() ([]byte, error) {
+	m := make(map[string]string, len(p))
+	for k, v := range p {
+		m[fmt.Sprint(k)] = v
+	}
+	return json.Marshal(m)
 }
 
 // Request is a wrapper for http.Request.
