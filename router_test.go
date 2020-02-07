@@ -43,9 +43,7 @@ func makeHandle(t test) Handle {
 			res.WriteHeader(t.statusCode)
 		}
 		if t.body != "" {
-			if err := res.Send(t.body); err != nil {
-				panic(err)
-			}
+			res.Send(t.body)
 		}
 	}
 }
@@ -298,9 +296,7 @@ func TestRouterMiddleware(t *testing.T) {
 	middlewareBody := "middleware"
 	router := NewRouter()
 	router.Use(func(req *Request, res *Response, next Next) {
-		if err := res.Send(middlewareBody); err != nil {
-			panic(err)
-		}
+		res.Send(middlewareBody)
 	})
 	router.GET(test.route, makeHandle(test))
 	server := httptest.NewServer(router)

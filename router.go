@@ -271,7 +271,7 @@ func (r *Router) Handle(method, route string, handle Handle) {
 // ServeHTTP writes reply headers and data to the ResponseWriter and then return.
 // Router implements the interface http.Handler.
 func (r *Router) ServeHTTP(w http.ResponseWriter, raw *http.Request) {
-	req, res := &Request{Request: raw}, &Response{w}
+	req, res := &Request{Request: raw}, &Response{ResponseWriter: w}
 	i, urlPath := -1, raw.URL.Path
 	var next Next
 	next = func(v ...interface{}) {
