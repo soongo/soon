@@ -7,6 +7,8 @@ package soon
 import (
 	"net/http"
 
+	"github.com/soongo/soon/util"
+
 	"github.com/dlclark/regexp2"
 	pathToRegexp "github.com/soongo/path-to-regexp"
 )
@@ -172,7 +174,7 @@ func (r *Router) Use(params ...interface{}) {
 
 func (r *Router) useMiddleware(route string, h Handle) {
 	r.initOptions()
-	route = routeJoin(route, "/(.*)")
+	route = util.RouteJoin(route, "/(.*)")
 	node := &node{
 		route:        route,
 		isMiddleware: true,
@@ -185,7 +187,7 @@ func (r *Router) useMiddleware(route string, h Handle) {
 
 func (r *Router) useErrorHandle(route string, h ErrorHandle) {
 	r.initOptions()
-	route = routeJoin(route, "/(.*)")
+	route = util.RouteJoin(route, "/(.*)")
 	node := &node{
 		route:       route,
 		errorHandle: h,
@@ -197,7 +199,7 @@ func (r *Router) useErrorHandle(route string, h ErrorHandle) {
 
 func (r *Router) mount(mountPoint string, router *Router) {
 	for _, v := range router.routes {
-		route := routeJoin(mountPoint, v.route)
+		route := util.RouteJoin(mountPoint, v.route)
 		node := &node{
 			method:       v.method,
 			route:        route,
@@ -256,7 +258,7 @@ func (r *Router) ALL(route string, handle Handle) {
 // And dispatch a req, res into the handler.
 func (r *Router) Handle(method, route string, handle Handle) {
 	r.initOptions()
-	route = addPrefixSlash(route)
+	route = util.AddPrefixSlash(route)
 	node := &node{
 		method:       method,
 		route:        route,

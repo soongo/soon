@@ -4,7 +4,9 @@
 
 package soon
 
-import "net/http"
+import (
+	"net/http"
+)
 
 // App represents an application with Soon framework.
 type App struct {

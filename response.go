@@ -5,15 +5,12 @@
 package soon
 
 import (
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"os"
 	"path/filepath"
-	"regexp"
-	"strings"
 	"time"
+
+	"github.com/soongo/soon/util"
 
 	"github.com/soongo/soon/renderer"
 )
@@ -25,49 +22,6 @@ type Response struct {
 	// The finished property will be true if response.end()
 	// has been called.
 	finished bool
-}
-
-var charsetRegexp = regexp.MustCompile(";\\s*charset\\s*=")
-
-type DotfilesPolicy uint8
-
-const (
-	DotfilesPolicyIgnore DotfilesPolicy = iota
-	DotfilesPolicyAllow
-	DotfilesPolicyDeny
-)
-
-var (
-	ErrIsDir     = errors.New("file is directory")
-	ErrForbidden = errors.New(http.StatusText(http.StatusForbidden))
-	ErrNotFound  = errors.New(http.StatusText(http.StatusNotFound))
-)
-
-type Callback func(err error)
-
-type FileOptions struct {
-	// Sets the max-age property of the Cache-Control header.
-	MaxAge *time.Duration
-
-	// Root directory for relative filenames.
-	Root string
-
-	// filename for download
-	Name string
-
-	// Whether sets the Last-Modified header to the last modified date of the
-	// file on the OS. Set true to disable it.
-	LastModifiedDisabled bool
-
-	// HTTP headers to serve with the file.
-	Header map[string]string
-
-	// Option for serving dotfiles. Possible values are “DotfilesPolicyAllow”,
-	// “DotfilesPolicyDeny”, “DotfilesPolicyIgnore”.
-	DotfilesPolicy DotfilesPolicy
-
-	// Enable or disable accepting ranged requests. Set true to disable it.
-	AcceptRangesDisabled bool
 }
 
 // Appends the specified value to the HTTP response header field.
@@ -94,28 +48,7 @@ func (r *Response) Get(field string) string {
 // Sets the response’s HTTP header field to value.
 // To set multiple fields at once, pass a string map as the parameter.
 func (r *Response) Set(value ...interface{}) {
-	if len(value) == 2 {
-		if k, ok := value[0].(string); ok {
-			if v, ok := value[1].(string); ok {
-				if strings.ToLower(k) == "content-type" && !charsetRegexp.MatchString(v) {
-					charset := LookupCharset(strings.Split(v, ";")[0])
-					if charset != "" {
-						v += "; charset=" + charset
-					}
-				}
-				r.Header().Set(k, v)
-			}
-		}
-		return
-	}
-
-	if len(value) == 1 {
-		if arr, ok := value[0].(map[string]string); ok {
-			for k, v := range arr {
-				r.Set(k, v)
-			}
-		}
-	}
+	util.SetHeader(r, value...)
 }
 
 // Status sets the HTTP status for the response.
@@ -134,12 +67,7 @@ func (r *Response) SendStatus(code int) {
 // by LookupMimeType() for the specified type. If type contains the
 // “/” character, then it sets the Content-Type to type.
 func (r *Response) Type(s string) {
-	k, s := "Content-Type", strings.Trim(s, " ")
-	if strings.Contains(s, "/") {
-		r.Set(k, s)
-	} else {
-		r.Set(k, LookupMimeType(s))
-	}
+	util.SetContentType(r, s)
 }
 
 // Sets the HTTP response Content-Disposition header field to “attachment”.
@@ -180,101 +108,31 @@ func (r *Response) ClearCookie(c *http.Cookie) {
 // header field based on the filename’s extension.
 // Unless the root option is set in the options object, path must be an
 // absolute path to the file.
-func (r *Response) SendFile(p string, o *FileOptions, callback Callback) {
-	p = strings.Trim(p, " ")
-	if p == "" {
-		panic("path argument is required")
-	}
-
-	if o == nil {
-		o = &FileOptions{}
-	}
-
-	root := strings.Trim(o.Root, " ")
-	if root == "" && !filepath.IsAbs(p) {
-		panic("path must be absolute or specify root")
-	}
-
-	absPath := EncodeURI(filepath.Join(root, p))
-	fileInfo, err := os.Stat(absPath)
-
-	if callback == nil {
-		callback = func(err error) {
-			if err == ErrIsDir {
-				r.Send(http.StatusText(http.StatusNotFound))
-			}
-		}
-	}
-
-	if err != nil {
-		callback(err)
-		return
-	}
-
-	if fileInfo.IsDir() {
-		callback(ErrIsDir)
-		return
-	}
-
-	if strings.HasPrefix(filepath.Base(absPath), ".") {
-		if o.DotfilesPolicy == DotfilesPolicyIgnore {
-			callback(ErrNotFound)
-			return
-		}
-		if o.DotfilesPolicy == DotfilesPolicyDeny {
-			callback(ErrForbidden)
-			return
-		}
-	}
-
-	if o.Header != nil {
-		r.Set(o.Header)
-	}
-
-	if o.MaxAge != nil {
-		r.Set("Cache-Control", fmt.Sprintf("max-age=%.0f", (*o.MaxAge).Seconds()))
-	}
-
-	if !o.LastModifiedDisabled {
-		r.Set("Last-Modified", fileInfo.ModTime().UTC().Format(http.TimeFormat))
-	}
-
-	f, err := os.Open(absPath)
-	if err != nil {
-		callback(err)
-		return
-	}
-	defer f.Close()
-
-	r.Type(filepath.Ext(p))
-	r.renderHeader()
-	_, err = io.Copy(r, f)
-	callback(err)
+func (r *Response) SendFile(filePath string, options *renderer.FileOptions) {
+	r.Render(renderer.File{FilePath: filePath, Options: options})
 }
 
 // Transfers the file at path as an “attachment”. Typically, browsers will
 // prompt the user for download. By default, the Content-Disposition header
 // “filename=” parameter is path (this typically appears in the browser dialog).
-// Override this default with the filename parameter.
+// Override this default with the options.Name parameter.
 //
-// When an error occurs or transfer is complete, the method calls the optional
-// callback function fn. This method uses res.SendFile() to transfer the file.
-//
-// The optional options argument passes through to the underlying res.SendFile()
-// call, and takes the exact same parameters.
-func (r *Response) Download(p string, o *FileOptions, c Callback) {
-	name := filepath.Base(p)
-	if o == nil {
-		o = &FileOptions{}
+// This method uses res.SendFile() to transfer the file. The optional options
+// argument passes through to the underlying res.SendFile() call, and takes the
+// exact same parameters.
+func (r *Response) Download(filePath string, options *renderer.FileOptions) {
+	name := filepath.Base(filePath)
+	if options == nil {
+		options = &renderer.FileOptions{}
 	}
-	if o.Name != "" {
-		name = o.Name
+	if options.Name != "" {
+		name = options.Name
 	}
-	if o.Header == nil {
-		o.Header = make(map[string]string)
+	if options.Header == nil {
+		options.Header = make(map[string]string, 1)
 	}
-	o.Header["Content-Disposition"] = fmt.Sprintf("attachment; filename=\"%s\"", name)
-	r.SendFile(p, o, c)
+	options.Header["Content-Disposition"] = fmt.Sprintf("attachment; filename=\"%s\"", name)
+	r.SendFile(filePath, options)
 }
 
 // End marks the response is finished, and other send operations after end
@@ -316,6 +174,7 @@ func (r *Response) Render(renderer renderer.Renderer) {
 		renderer.RenderHeader(r)
 
 		if err := renderer.Render(r); err != nil {
+			r.Status(http.StatusInternalServerError)
 			panic(err)
 		}
 	}

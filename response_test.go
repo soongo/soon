@@ -251,7 +251,7 @@ func TestSendFile(t *testing.T) {
 		lastModified := fileInfo.ModTime().UTC().Format(http.TimeFormat)
 		k, expectedHeader := "Content-Type", "text/markdown; charset=UTF-8"
 		res := &Response{ResponseWriter: httptest.NewRecorder()}
-		res.SendFile(filePath, nil, nil)
+		res.SendFile(filePath, nil)
 		recorder := res.ResponseWriter.(*httptest.ResponseRecorder)
 		body := recorder.Body.String()
 		if body != fileContent {
@@ -270,20 +270,23 @@ func TestSendFile(t *testing.T) {
 		filePath := pwd + "/.travis.yml"
 		t.Run("default", func(t *testing.T) {
 			res := &Response{ResponseWriter: httptest.NewRecorder()}
-			res.SendFile(filePath, nil, nil)
 			recorder := res.ResponseWriter.(*httptest.ResponseRecorder)
-			body := recorder.Body.String()
-			if recorder.Code != http.StatusOK {
-				t.Errorf("got `%d`, expect `%d`", recorder.Code, http.StatusOK)
-			}
-			if body != "" {
-				t.Errorf("got `%s`, expect `%s`", body, "")
-			}
+			defer func() {
+				if err := recover(); err != nil {
+					if err != renderer.ErrNotFound {
+						t.Error("should got renderer.ErrNotFound error")
+					}
+					if recorder.Code != http.StatusInternalServerError {
+						t.Errorf("got `%d`, expect `%d`", recorder.Code, http.StatusInternalServerError)
+					}
+				}
+			}()
+			res.SendFile(filePath, nil)
 		})
 		t.Run("allow", func(t *testing.T) {
 			res := &Response{ResponseWriter: httptest.NewRecorder()}
-			options := &FileOptions{DotfilesPolicy: DotfilesPolicyAllow}
-			res.SendFile(filePath, options, nil)
+			options := &renderer.FileOptions{DotfilesPolicy: renderer.DotfilesPolicyAllow}
+			res.SendFile(filePath, options)
 			recorder := res.ResponseWriter.(*httptest.ResponseRecorder)
 			body := recorder.Body.String()
 			_, fileContent := getFileContent(filePath)
@@ -294,24 +297,22 @@ func TestSendFile(t *testing.T) {
 				t.Errorf("got `%s`, expect `%s`", body, fileContent)
 			}
 		})
-	})
-
-	t.Run("callback", func(t *testing.T) {
-		filePath := pwd + "/.travis.yml"
-		res := &Response{ResponseWriter: httptest.NewRecorder()}
-		res.SendFile(filePath, nil, func(err error) {
-			if err == ErrNotFound {
-				res.SendStatus(http.StatusNotFound)
-			}
+		t.Run("deny", func(t *testing.T) {
+			res := &Response{ResponseWriter: httptest.NewRecorder()}
+			options := &renderer.FileOptions{DotfilesPolicy: renderer.DotfilesPolicyDeny}
+			recorder := res.ResponseWriter.(*httptest.ResponseRecorder)
+			defer func() {
+				if err := recover(); err != nil {
+					if err != renderer.ErrForbidden {
+						t.Error("should got renderer.ErrNotFound error")
+					}
+					if recorder.Code != http.StatusInternalServerError {
+						t.Errorf("got `%d`, expect `%d`", recorder.Code, http.StatusInternalServerError)
+					}
+				}
+			}()
+			res.SendFile(filePath, options)
 		})
-		recorder := res.ResponseWriter.(*httptest.ResponseRecorder)
-		body := recorder.Body.String()
-		if recorder.Code != http.StatusNotFound {
-			t.Errorf("got `%d`, expect `%d`", recorder.Code, http.StatusNotFound)
-		}
-		if body != http.StatusText(http.StatusNotFound) {
-			t.Errorf("got `%s`, expect `%s`", body, http.StatusText(http.StatusNotFound))
-		}
 	})
 }
 
@@ -327,7 +328,7 @@ func TestDownload(t *testing.T) {
 		lastModified := fileInfo.ModTime().UTC().Format(http.TimeFormat)
 		k, expectedHeader := "Content-Type", "text/markdown; charset=UTF-8"
 		res := &Response{ResponseWriter: httptest.NewRecorder()}
-		res.Download(filePath, nil, nil)
+		res.Download(filePath, nil)
 		recorder := res.ResponseWriter.(*httptest.ResponseRecorder)
 		body := recorder.Body.String()
 		if body != fileContent {
@@ -348,8 +349,8 @@ func TestDownload(t *testing.T) {
 
 	t.Run("custom name", func(t *testing.T) {
 		res := &Response{ResponseWriter: httptest.NewRecorder()}
-		options := &FileOptions{Name: "custom-name"}
-		res.Download(filePath, options, nil)
+		options := &renderer.FileOptions{Name: "custom-name"}
+		res.Download(filePath, options)
 		contentDisposition := `attachment; filename="` + options.Name + `"`
 		if res.Get("Content-Disposition") != contentDisposition {
 			t.Errorf("got `%s`, expect `%s`", res.Get("Content-Disposition"), contentDisposition)

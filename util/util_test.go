@@ -2,7 +2,7 @@
 // Use of this source code is governed by a MIT style
 // license that can be found in the LICENSE file.
 
-package soon
+package util
 
 import "testing"
 
@@ -20,7 +20,7 @@ func TestAddPrefixSlash(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			if got := addPrefixSlash(tt.p); got != tt.want {
+			if got := AddPrefixSlash(tt.p); got != tt.want {
 				t.Errorf("addPrefixSlash(%s) = %s, want %s", tt.p, got, tt.want)
 			}
 		})
@@ -44,7 +44,7 @@ func TestRouteJoin(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			if got := routeJoin(tt.p1, tt.p2); got != tt.want {
+			if got := RouteJoin(tt.p1, tt.p2); got != tt.want {
 				t.Errorf("routeJoin(%s, %s) = %s, want %s", tt.p1, tt.p2, got, tt.want)
 			}
 		})
