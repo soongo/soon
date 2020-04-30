@@ -10,9 +10,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/soongo/soon/util"
-
 	"github.com/soongo/soon/renderer"
+	"github.com/soongo/soon/util"
 )
 
 // Context is the most important part of soon. It allows us to pass variables between middleware,
@@ -21,9 +20,18 @@ type Context struct {
 	*Request
 	http.ResponseWriter
 
+	next Next
+
 	// The finished property will be true if response.end()
 	// has been called.
 	finished bool
+}
+
+type Next func(v ...interface{})
+
+// Next calls the next handler
+func (c *Context) Next() {
+	c.next()
 }
 
 // Appends the specified value to the HTTP response header field.

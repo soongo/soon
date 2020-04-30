@@ -13,15 +13,13 @@ import (
 	pathToRegexp "github.com/soongo/path-to-regexp"
 )
 
-type Next func(v ...interface{})
-
 // Handle is the handler function of router, router use it to handle matched
 // http request, and dispatch a context object into the handler.
-type Handle func(*Context, Next)
+type Handle func(*Context)
 
 // ErrorHandle handles the error generated in route handler, and dispatch error
 // and context objects into the error handler.
-type ErrorHandle func(interface{}, *Context, Next)
+type ErrorHandle func(interface{}, *Context)
 
 type node struct {
 	method       string
@@ -123,9 +121,9 @@ func (r *Router) initOptions() {
 	}
 }
 
-func (r *Router) recv(c *Context, next Next) {
+func (r *Router) recv(c *Context) {
 	if rcv := recover(); rcv != nil {
-		next(rcv)
+		c.next(rcv)
 	}
 }
 
@@ -148,19 +146,19 @@ func (r *Router) Use(params ...interface{}) {
 		route = v
 	}
 
-	var handle interface{} = params[length-1]
+	var handle = params[length-1]
 
 	if router, ok := handle.(*Router); ok {
 		r.mount(route, router)
 		return
 	}
 
-	if m, ok := handle.(func(*Context, Next)); ok {
+	if m, ok := handle.(func(*Context)); ok {
 		r.useMiddleware(route, m)
 		return
 	}
 
-	if h, ok := handle.(func(interface{}, *Context, Next)); ok {
+	if h, ok := handle.(func(interface{}, *Context)); ok {
 		r.useErrorHandle(route, h)
 		return
 	}
@@ -275,8 +273,7 @@ func (r *Router) Handle(method, route string, handle Handle) {
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	c := &Context{Request: &Request{Request: req}, ResponseWriter: w}
 	i, urlPath := -1, req.URL.Path
-	var next Next
-	next = func(v ...interface{}) {
+	c.next = func(v ...interface{}) {
 		if i++; i >= len(r.routes) {
 			if len(v) > 0 && v[0] != nil {
 				defaultErrorHandler(v[0], c)
@@ -291,24 +288,24 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			if len(v) > 0 && v[0] != nil {
 				if node.isErrorHandler() {
 					node.buildRequestParams(c)
-					node.errorHandle(v[0], c, next)
+					node.errorHandle(v[0], c)
 					return
 				}
-				next(v[0])
+				c.next(v[0])
 				return
 			}
 
 			if node.isMiddleware || node.method == HTTPMethodAll || node.method == req.Method {
 				node.buildRequestParams(c)
-				node.handle(c, next)
+				node.handle(c)
 				return
 			}
 		}
 
-		next()
+		c.next()
 	}
 
-	defer r.recv(c, next)
+	defer r.recv(c)
 
-	next()
+	c.next()
 }
