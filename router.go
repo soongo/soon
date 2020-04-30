@@ -16,12 +16,12 @@ import (
 type Next func(v ...interface{})
 
 // Handle is the handler function of router, router use it to handle matched
-// http request, and dispatch req, res into the handler.
-type Handle func(*Request, *Response, Next)
+// http request, and dispatch a context object into the handler.
+type Handle func(*Context, Next)
 
-// ErrorHandle handles the error generated in route handler,
-// and dispatch error, req, res into the error handler.
-type ErrorHandle func(interface{}, *Request, *Response, Next)
+// ErrorHandle handles the error generated in route handler, and dispatch error
+// and context objects into the error handler.
+type ErrorHandle func(interface{}, *Context, Next)
 
 type node struct {
 	method       string
@@ -39,16 +39,16 @@ func (n *node) initRegexp() {
 		n.route, &n.tokens, n.options))
 }
 
-func (n *node) buildRequestParams(req *Request) {
+func (n *node) buildRequestParams(c *Context) {
 	if len(n.tokens) > 0 {
-		req.resetParams()
-		match, err := n.regexp.FindStringMatch(req.URL.Path)
+		c.resetParams()
+		match, err := n.regexp.FindStringMatch(c.URL.Path)
 		if err != nil {
 			panic(err)
 		}
 		for i, g := range match.Groups() {
 			if i > 0 {
-				req.Params.Set(n.tokens[i-1].Name, g.String())
+				c.Params.Set(n.tokens[i-1].Name, g.String())
 			}
 		}
 	}
@@ -66,8 +66,8 @@ func (n *node) isErrorHandler() bool {
 	return n.errorHandle != nil
 }
 
-// Router is a http.Handler which can be used to dispatch requests to different
-// handler functions
+// Router is a http.Handler which can be used to dispatch requests to
+// different handler functions.
 type Router struct {
 	routes []*node
 
@@ -88,7 +88,7 @@ const (
 var _ http.Handler = NewRouter()
 
 // Function to handle error when no other error handlers.
-func defaultErrorHandler(v interface{}, _ *Request, w http.ResponseWriter) {
+func defaultErrorHandler(v interface{}, c *Context) {
 	text := http.StatusText(http.StatusInternalServerError)
 	switch err := v.(type) {
 	case error:
@@ -96,7 +96,7 @@ func defaultErrorHandler(v interface{}, _ *Request, w http.ResponseWriter) {
 	case string:
 		text = err
 	}
-	http.Error(w, text, http.StatusInternalServerError)
+	http.Error(c.ResponseWriter, text, http.StatusInternalServerError)
 }
 
 // NewRouter returns a new initialized Router with default configuration.
@@ -123,7 +123,7 @@ func (r *Router) initOptions() {
 	}
 }
 
-func (r *Router) recv(req *Request, res *Response, next Next) {
+func (r *Router) recv(c *Context, next Next) {
 	if rcv := recover(); rcv != nil {
 		next(rcv)
 	}
@@ -155,12 +155,12 @@ func (r *Router) Use(params ...interface{}) {
 		return
 	}
 
-	if m, ok := handle.(func(*Request, *Response, Next)); ok {
+	if m, ok := handle.(func(*Context, Next)); ok {
 		r.useMiddleware(route, m)
 		return
 	}
 
-	if h, ok := handle.(func(interface{}, *Request, *Response, Next)); ok {
+	if h, ok := handle.(func(interface{}, *Context, Next)); ok {
 		r.useErrorHandle(route, h)
 		return
 	}
@@ -254,8 +254,8 @@ func (r *Router) ALL(route string, handle Handle) {
 	r.Handle(HTTPMethodAll, route, handle)
 }
 
-// Handle registers the handler for the http request which matched the method and route.
-// And dispatch a req, res into the handler.
+// Handle registers the handler for the http request which matched the method
+// and route, and dispatch a context object into the handler.
 func (r *Router) Handle(method, route string, handle Handle) {
 	r.initOptions()
 	route = util.AddPrefixSlash(route)
@@ -272,16 +272,16 @@ func (r *Router) Handle(method, route string, handle Handle) {
 
 // ServeHTTP writes reply headers and data to the ResponseWriter and then return.
 // Router implements the interface http.Handler.
-func (r *Router) ServeHTTP(w http.ResponseWriter, raw *http.Request) {
-	req, res := &Request{Request: raw}, &Response{ResponseWriter: w}
-	i, urlPath := -1, raw.URL.Path
+func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	c := &Context{Request: &Request{Request: req}, ResponseWriter: w}
+	i, urlPath := -1, req.URL.Path
 	var next Next
 	next = func(v ...interface{}) {
 		if i++; i >= len(r.routes) {
 			if len(v) > 0 && v[0] != nil {
-				defaultErrorHandler(v[0], req, res)
+				defaultErrorHandler(v[0], c)
 			} else {
-				http.NotFound(w, raw)
+				http.NotFound(w, req)
 			}
 			return
 		}
@@ -290,17 +290,17 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, raw *http.Request) {
 		if node.match(urlPath) {
 			if len(v) > 0 && v[0] != nil {
 				if node.isErrorHandler() {
-					node.buildRequestParams(req)
-					node.errorHandle(v[0], req, res, next)
+					node.buildRequestParams(c)
+					node.errorHandle(v[0], c, next)
 					return
 				}
 				next(v[0])
 				return
 			}
 
-			if node.isMiddleware || node.method == HTTPMethodAll || node.method == raw.Method {
-				node.buildRequestParams(req)
-				node.handle(req, res, next)
+			if node.isMiddleware || node.method == HTTPMethodAll || node.method == req.Method {
+				node.buildRequestParams(c)
+				node.handle(c, next)
 				return
 			}
 		}
@@ -308,7 +308,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, raw *http.Request) {
 		next()
 	}
 
-	defer r.recv(req, res, next)
+	defer r.recv(c, next)
 
 	next()
 }

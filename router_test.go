@@ -35,15 +35,15 @@ var methods = []string{
 }
 
 func makeHandle(t test) Handle {
-	return func(req *Request, res *Response, next Next) {
+	return func(c *Context, next Next) {
 		for k, v := range t.header {
-			res.Header().Set(k, v)
+			c.Header().Set(k, v)
 		}
 		if t.statusCode != 0 {
-			res.WriteHeader(t.statusCode)
+			c.WriteHeader(t.statusCode)
 		}
 		if t.body != "" {
-			res.Send(t.body)
+			c.Send(t.body)
 		}
 	}
 }
@@ -80,8 +80,8 @@ func getWantStatusCode(statusCode int) int {
 	return statusCode
 }
 
-func notFound(req *Request, res *Response, next Next) {
-	http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+func notFound(c *Context, next Next) {
+	http.Error(c, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 }
 
 func TestRouterWithDefaultOptions(t *testing.T) {
@@ -295,8 +295,8 @@ func TestRouterMiddleware(t *testing.T) {
 	test := test{route: "/", path: "/", body: "root page"}
 	middlewareBody := "middleware"
 	router := NewRouter()
-	router.Use(func(req *Request, res *Response, next Next) {
-		res.Send(middlewareBody)
+	router.Use(func(c *Context, next Next) {
+		c.Send(middlewareBody)
 	})
 	router.GET(test.route, makeHandle(test))
 	server := httptest.NewServer(router)
