@@ -19,7 +19,7 @@ func TestLookupMimeType(t *testing.T) {
 	for k, v := range tests {
 		result := LookupMimeType(k)
 		if result != v {
-			t.Errorf("Got %s, want %s", result, v)
+			t.Errorf(testErrorFormat, result, v)
 		}
 	}
 }
@@ -39,7 +39,7 @@ func TestLookupCharset(t *testing.T) {
 	for k, v := range tests {
 		result := LookupCharset(k)
 		if result != v {
-			t.Errorf("Got %s, want %s", result, v)
+			t.Errorf(testErrorFormat, result, v)
 		}
 	}
 }

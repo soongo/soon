@@ -1126,6 +1126,8 @@ var mimeTypes = map[string]string{
 	"tar.bz2":                  "application/x-gtar",
 }
 
+var charsetUTF8Regexp = regexp.MustCompile("^text/|^application/(javascript|json)")
+
 // LookupMimeType lookups the MIME Type of a suffix string.
 func LookupMimeType(s string) string {
 	if m, ok := mimeTypes[s]; ok {
@@ -1144,8 +1146,7 @@ func LookupMimeType(s string) string {
 }
 
 func LookupCharset(mimeType string) string {
-	r := regexp.MustCompile("^text/|^application/(javascript|json)")
-	if r.MatchString(mimeType) {
+	if charsetUTF8Regexp.MatchString(mimeType) {
 		return "UTF-8"
 	}
 	return ""

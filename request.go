@@ -39,6 +39,10 @@ type Request struct {
 	Params Params
 }
 
+func NewRequest(req *http.Request) *Request {
+	return &Request{Request: req, Params: make(Params, 0)}
+}
+
 // resetParams resets params to empty
 func (r *Request) resetParams() {
 	if r.Params == nil || len(r.Params) > 0 {

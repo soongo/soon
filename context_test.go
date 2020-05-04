@@ -18,6 +18,29 @@ import (
 	"github.com/soongo/soon/renderer"
 )
 
+func TestHeadersSent(t *testing.T) {
+	c := &Context{ResponseWriter: httptest.NewRecorder()}
+	if c.HeadersSent != false {
+		t.Errorf("got `%v`, expect `%v`", c.HeadersSent, false)
+	}
+
+	c.Send("foo")
+	if c.HeadersSent != true {
+		t.Errorf("got `%v`, expect `%v`", c.HeadersSent, true)
+	}
+}
+
+func TestLocals(t *testing.T) {
+	key, expected := "foo", "bar"
+	c := &Context{ResponseWriter: httptest.NewRecorder()}
+	c.init()
+	c.Locals.Set(key, expected)
+	result := c.Locals.Get(key)
+	if result != expected {
+		t.Errorf("got `%v`, expect `%v`", result, expected)
+	}
+}
+
 func TestAppend(t *testing.T) {
 	t.Run("normal", func(t *testing.T) {
 		k, expected := "Content-Type", "application/json"

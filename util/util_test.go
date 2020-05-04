@@ -6,11 +6,34 @@ package util
 
 import "testing"
 
+var testErrorFormat = "got `%v`, expect `%v`"
+
+func TestStringSlice(t *testing.T) {
+	t.Run("contains", func(t *testing.T) {
+		arr := StringSlice{"foo", "*", "你好"}
+		tests := []struct {
+			s        StringSlice
+			str      string
+			expected bool
+		}{
+			{arr, "foo", true},
+			{arr, "bar", false},
+			{arr, "*", true},
+			{arr, "你好", true},
+		}
+		for _, tt := range tests {
+			if got := tt.s.Contains(tt.str); got != tt.expected {
+				t.Errorf(testErrorFormat, got, tt.expected)
+			}
+		}
+	})
+}
+
 func TestAddPrefixSlash(t *testing.T) {
 	name := "addPrefixSlash"
 	tests := []struct {
-		p    string
-		want string
+		p        string
+		expected string
 	}{
 		{"", "/"},
 		{"/", "/"},
@@ -20,8 +43,8 @@ func TestAddPrefixSlash(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			if got := AddPrefixSlash(tt.p); got != tt.want {
-				t.Errorf("addPrefixSlash(%s) = %s, want %s", tt.p, got, tt.want)
+			if got := AddPrefixSlash(tt.p); got != tt.expected {
+				t.Errorf(testErrorFormat, got, tt.expected)
 			}
 		})
 	}
@@ -30,9 +53,9 @@ func TestAddPrefixSlash(t *testing.T) {
 func TestRouteJoin(t *testing.T) {
 	name := "routeJoin"
 	tests := []struct {
-		p1   string
-		p2   string
-		want string
+		p1       string
+		p2       string
+		expected string
 	}{
 		{"", "", ""},
 		{"/", "/", "/"},
@@ -44,8 +67,8 @@ func TestRouteJoin(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			if got := RouteJoin(tt.p1, tt.p2); got != tt.want {
-				t.Errorf("routeJoin(%s, %s) = %s, want %s", tt.p1, tt.p2, got, tt.want)
+			if got := RouteJoin(tt.p1, tt.p2); got != tt.expected {
+				t.Errorf(testErrorFormat, got, tt.expected)
 			}
 		})
 	}

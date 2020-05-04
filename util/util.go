@@ -10,6 +10,30 @@ import (
 	"strings"
 )
 
+// StringSlice attaches the methods of Interface to []string.
+type StringSlice []string
+
+// Contains reports whether str is within the string slice.
+func (s StringSlice) Contains(str string) bool {
+	for _, v := range s {
+		if v == str {
+			return true
+		}
+	}
+	return false
+}
+
+// Filter returns a new string slice with matched values.
+func (s StringSlice) Filter(f func(string) bool) []string {
+	result := make([]string, 0, len(s))
+	for _, v := range s {
+		if f(v) {
+			result = append(result, v)
+		}
+	}
+	return result
+}
+
 // FileExists returns true if specified absolute file path exists.
 func FileExists(absPath string) bool {
 	if _, err := os.Stat(absPath); os.IsNotExist(err) {

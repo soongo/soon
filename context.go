@@ -22,16 +22,46 @@ type Context struct {
 
 	next Next
 
+	// Locals contains response local variables scoped to the request,
+	// and therefore available during that request / response cycle (if any).
+	//
+	// This property is useful for exposing request-level information such as
+	// the request path name, authenticated user, user settings, and so on.
+	Locals Locals
+
+	// HeadersSent indicates if the app sent HTTP headers for the response.
+	HeadersSent bool
+
 	// The finished property will be true if response.end()
 	// has been called.
 	finished bool
 }
 
+func NewContext(req *http.Request, res http.ResponseWriter) *Context {
+	c := &Context{Request: NewRequest(req), ResponseWriter: res}
+	c.init()
+	return c
+}
+
 type Next func(v ...interface{})
 
 // Next calls the next handler
-func (c *Context) Next() {
-	c.next()
+func (c *Context) Next(v ...interface{}) {
+	c.next(v...)
+}
+
+type Locals map[interface{}]interface{}
+
+func (l Locals) Get(k interface{}) interface{} {
+	return l[k]
+}
+
+func (l Locals) Set(k interface{}, v interface{}) {
+	l[k] = v
+}
+
+func (c *Context) init() {
+	c.Locals = make(Locals, 0)
 }
 
 // Appends the specified value to the HTTP response header field.
@@ -49,13 +79,17 @@ func (c *Context) Append(key string, value interface{}) {
 	}
 }
 
-// Get returns the HTTP response header specified by field.
-// The match is case-insensitive.
+// Get gets the first value of response header associated with the given key.
+// If there are no values associated with the key, Get returns "".
+// It is case insensitive
 func (c *Context) Get(field string) string {
 	return c.Header().Get(field)
 }
 
-// Sets the response’s HTTP header field to value.
+// Set sets the response header entries associated with key to the
+// single element value. It replaces any existing values
+// associated with key. The key is case insensitive;
+//
 // To set multiple fields at once, pass a string map as the parameter.
 func (c *Context) Set(value ...interface{}) {
 	util.SetHeader(c, value...)
@@ -153,6 +187,13 @@ func (c *Context) End() {
 	c.finished = true
 }
 
+func (c *Context) Format(m map[string]Handle) {
+	k := "Accept"
+	//accept := c.Get()
+	util.Vary(c, []string{k})
+	//for k
+}
+
 // Sends string body
 func (c *Context) Send(s string) {
 	c.String(s)
@@ -172,6 +213,7 @@ func (c *Context) Json(v interface{}) {
 
 // sets the common http header.
 func (c *Context) renderHeader() {
+	c.HeadersSent = true
 	c.Header().Set("Connection", "keep-alive")
 	c.Header().Set("X-Powered-By", "Soon")
 }
