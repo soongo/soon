@@ -23,6 +23,16 @@ func (s StringSlice) Contains(str string) bool {
 	return false
 }
 
+// Index returns the index of str in the string slice.
+func (s StringSlice) Index(str string) int {
+	for i, v := range s {
+		if v == str {
+			return i
+		}
+	}
+	return -1
+}
+
 // Filter returns a new string slice with matched values.
 func (s StringSlice) Filter(f func(string) bool) []string {
 	result := make([]string, 0, len(s))
@@ -30,6 +40,15 @@ func (s StringSlice) Filter(f func(string) bool) []string {
 		if f(v) {
 			result = append(result, v)
 		}
+	}
+	return result
+}
+
+// Map returns a new string slice with modified values.
+func (s StringSlice) Map(f func(string) string) []string {
+	result := make([]string, len(s), len(s))
+	for i, v := range s {
+		result[i] = f(v)
 	}
 	return result
 }

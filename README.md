@@ -28,9 +28,9 @@ import (
 )
 
 // an example middleware
-func logger(req *soon.Request, res *soon.Response, next soon.Next) {
+func logger(c *soon.Context) {
 	// do something before
-	next()
+	c.Next()
 	// do something after
 }
 
@@ -42,16 +42,16 @@ func main() {
 
 	app.Use(logger) // use middleware
 
-	app.GET("/", func(req *soon.Request, res *soon.Response, next soon.Next) {
-		res.Send("Hello World")
+	app.GET("/", func(c *soon.Context) {
+		c.Send("Hello World")
 	})
 
-	app.GET("/:foo", func(req *soon.Request, res *soon.Response, next soon.Next) {
-		res.Send(req.Params.Get("foo"))
+	app.GET("/:foo", func(c *soon.Context) {
+		c.Send(c.Params.Get("foo"))
 	})
 
 	// an example error handler
-	app.Use(func(v interface{}, req *soon.Request, res *soon.Response, next soon.Next) {
+	app.Use(func(v interface{}, c *soon.Context) {
 		msg := "Internal Server Error"
 		switch err := v.(type) {
 		case error:
@@ -59,8 +59,8 @@ func main() {
 		case string:
 			msg = err
 		}
-		res.WriteHeader(500)
-		res.Send(msg)
+		c.WriteHeader(500)
+		c.Send(msg)
 	})
 
 	app.Run() // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")

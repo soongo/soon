@@ -8,6 +8,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
+
+	"github.com/soongo/negotiator"
+	"github.com/soongo/soon/util"
 )
 
 // Params contains all matched url params
@@ -41,6 +45,88 @@ type Request struct {
 
 func NewRequest(req *http.Request) *Request {
 	return &Request{Request: req, Params: make(Params, 0)}
+}
+
+// Accepts checks if the specified content types are acceptable, based on the
+// request’s Accept HTTP header field. The method returns the best match,
+// or if none of the specified content types is acceptable, returns nil (in
+// which case, the application should respond with 406 "Not Acceptable").
+
+// The types value may be multiple MIME types string (such as “application/json”,
+// "text/html"), extension names (such as “json”, "text").
+// The method returns the best match (if any).
+func (r *Request) Accepts(types ...string) []string {
+	n := negotiator.New(r.Header)
+	if len(types) == 0 {
+		return n.MediaTypes()
+	}
+
+	// no accept header, return first given type
+	if len(r.Header[negotiator.HeaderAccept]) == 0 {
+		return types[0:1]
+	}
+
+	mimes := util.StringSlice(types).Map(func(s string) string {
+		if strings.Index(s, "/") == -1 {
+			return util.LookupMimeType(s)
+		}
+		return s
+	})
+
+	accept := n.MediaType(mimes...)
+	if accept != "" {
+		i := util.StringSlice(mimes).Index(accept)
+		if i > -1 && i < len(types) {
+			return types[i : i+1]
+		}
+	}
+
+	return nil
+}
+
+// AcceptsEncodings reports accepted encodings or best fit based on `encodings`.
+func (r *Request) AcceptsEncodings(encodings ...string) []string {
+	n := negotiator.New(r.Header)
+	if len(encodings) == 0 {
+		return n.Encodings()
+	}
+
+	accepts := n.Encodings(encodings...)
+	if len(accepts) > 0 {
+		return accepts[0:1]
+	}
+
+	return nil
+}
+
+// AcceptsCharsets reports accepted charsets or best fit based on `charsets`.
+func (r *Request) AcceptsCharsets(charsets ...string) []string {
+	n := negotiator.New(r.Header)
+	if len(charsets) == 0 {
+		return n.Charsets()
+	}
+
+	accepts := n.Charsets(charsets...)
+	if len(accepts) > 0 {
+		return accepts[0:1]
+	}
+
+	return nil
+}
+
+// AcceptsLanguages reports accepted languages or best fit based on `languages`.
+func (r *Request) AcceptsLanguages(languages ...string) []string {
+	n := negotiator.New(r.Header)
+	if len(languages) == 0 {
+		return n.Languages()
+	}
+
+	accepts := n.Languages(languages...)
+	if len(accepts) > 0 {
+		return accepts[0:1]
+	}
+
+	return nil
 }
 
 // resetParams resets params to empty
