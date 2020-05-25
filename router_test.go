@@ -48,20 +48,19 @@ func makeHandle(t test) Handle {
 	}
 }
 
-func request(method, url string) (statusCode int, header http.Header, body string, err error) {
+func request(method, url string, h http.Header) (statusCode int, header http.Header, body string, err error) {
 	req, err := http.NewRequest(method, url, nil)
 	if err != nil {
 		return
 	}
-
+	req.Header = h
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return
 	}
+	defer resp.Body.Close()
 	statusCode = resp.StatusCode
 	header = resp.Header
-
-	defer resp.Body.Close()
 
 	byteArray, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -118,7 +117,7 @@ func TestRouterWithDefaultOptions(t *testing.T) {
 				server := httptest.NewServer(router)
 				defer server.Close()
 
-				statusCode, header, body, err := request(http.MethodGet, server.URL+tt.path)
+				statusCode, header, body, err := request(http.MethodGet, server.URL+tt.path, nil)
 				if err != nil {
 					t.Error(err)
 				}
@@ -138,7 +137,7 @@ func TestRouterWithDefaultOptions(t *testing.T) {
 						body, tt.body)
 				}
 
-				statusCode, _, _, err = request(http.MethodHead, server.URL+tt.path)
+				statusCode, _, _, err = request(http.MethodHead, server.URL+tt.path, nil)
 				if err != nil {
 					t.Error(err)
 				}
@@ -184,7 +183,7 @@ func TestRouterWithDefaultOptions(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run("", func(t *testing.T) {
-				statusCode, header, body, err := request(http.MethodGet, server.URL+tt.path)
+				statusCode, header, body, err := request(http.MethodGet, server.URL+tt.path, nil)
 				if err != nil {
 					t.Error(err)
 				}
@@ -241,7 +240,7 @@ func TestRouterWithTrailingSlashPolicyNone(t *testing.T) {
 			server := httptest.NewServer(router)
 			defer server.Close()
 
-			statusCode, _, body, err := request(http.MethodGet, server.URL+tt.path)
+			statusCode, _, body, err := request(http.MethodGet, server.URL+tt.path, nil)
 			if err != nil {
 				t.Error(err)
 			}
@@ -274,7 +273,7 @@ func TestRouterWithCustomNotFound(t *testing.T) {
 			server := httptest.NewServer(router)
 			defer server.Close()
 
-			statusCode, _, body, err := request(http.MethodGet, server.URL+tt.path)
+			statusCode, _, body, err := request(http.MethodGet, server.URL+tt.path, nil)
 			if err != nil {
 				t.Error(err)
 			}
@@ -302,7 +301,7 @@ func TestRouterMiddleware(t *testing.T) {
 	server := httptest.NewServer(router)
 	defer server.Close()
 
-	statusCode, _, body, err := request(http.MethodGet, server.URL+test.path)
+	statusCode, _, body, err := request(http.MethodGet, server.URL+test.path, nil)
 	if err != nil {
 		t.Error(err)
 	}
@@ -325,7 +324,7 @@ func TestRouterMethods(t *testing.T) {
 			server := httptest.NewServer(router)
 			defer server.Close()
 
-			statusCode, _, body, err := request(method, server.URL+test.path)
+			statusCode, _, body, err := request(method, server.URL+test.path, nil)
 			if err != nil {
 				t.Error(err)
 			}
@@ -339,7 +338,7 @@ func TestRouterMethods(t *testing.T) {
 			}
 
 			method = methods[(i+1)%len(methods)]
-			statusCode, _, body, err = request(method, server.URL+test.path)
+			statusCode, _, body, err = request(method, server.URL+test.path, nil)
 			if err != nil {
 				t.Error(err)
 			}
@@ -364,7 +363,7 @@ func TestRouterAll(t *testing.T) {
 
 	for _, method := range methods {
 		t.Run(method, func(t *testing.T) {
-			statusCode, _, body, err := request(method, server.URL+test.path)
+			statusCode, _, body, err := request(method, server.URL+test.path, nil)
 			if err != nil {
 				t.Error(err)
 			}

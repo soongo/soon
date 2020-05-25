@@ -87,14 +87,17 @@ var _ http.Handler = NewRouter()
 
 // Function to handle error when no other error handlers.
 func defaultErrorHandler(v interface{}, c *Context) {
-	text := http.StatusText(http.StatusInternalServerError)
+	status := http.StatusInternalServerError
+	text := http.StatusText(status)
 	switch err := v.(type) {
+	case httpError:
+		text, status = err.Error(), err.status()
 	case error:
 		text = err.Error()
 	case string:
 		text = err
 	}
-	http.Error(c.ResponseWriter, text, http.StatusInternalServerError)
+	http.Error(c.ResponseWriter, text, status)
 }
 
 // NewRouter returns a new initialized Router with default configuration.
@@ -302,7 +305,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 
-		c.next()
+		c.next(v...)
 	}
 
 	defer r.recv(c)

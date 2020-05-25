@@ -6,11 +6,26 @@ package util
 
 import (
 	"net/http"
+	"net/textproto"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
-var charsetRegexp = regexp.MustCompile(";\\s*charset\\s*=")
+var (
+	charsetRegexp           = regexp.MustCompile(";\\s*charset\\s*=")
+	acceptParamsRegexp      = regexp.MustCompile(" *; *")
+	acceptParamsPartsRegexp = regexp.MustCompile(" *= *")
+)
+
+// AcceptParams is an object with `.value`, `.quality` and `.params`.
+// also includes `.originalIndex` for stable sorting
+type AcceptParams struct {
+	Value         string
+	Quality       float64
+	Params        map[string]string
+	OriginalIndex int
+}
 
 // Sets the response’s HTTP header field to value.
 // To set multiple fields at once, pass a string map as the parameter.
@@ -54,7 +69,7 @@ func SetContentType(w http.ResponseWriter, s string) {
 // Vary marks that a request is varied on a header field.
 func Vary(w http.ResponseWriter, fields []string) {
 	k := "Vary"
-	header := strings.Join(w.Header().Values(k), ",")
+	header := strings.Join(GetHeaderValues(w.Header(), k), ",")
 	if val := AppendToVaryHeader(header, fields); val != "" {
 		w.Header().Set(k, val)
 	}
@@ -122,4 +137,43 @@ func ParseHeader(header string) []string {
 	values = append(values, header[start:end])
 
 	return values
+}
+
+// GetHeaderValues returns the header values of specified key.
+// This is a patch function of http.Header.Values for go version lower than 1.4
+func GetHeaderValues(h http.Header, key string) []string {
+	if h == nil {
+		return nil
+	}
+	return h[textproto.CanonicalMIMEHeaderKey(key)]
+}
+
+// NormalizeType normalizes the given `type`, for example "html" becomes "text/html".
+func NormalizeType(t string) AcceptParams {
+	if strings.Index(t, "/") >= 0 {
+		return acceptParams(t, 0)
+	}
+	return AcceptParams{Value: LookupMimeType(t), Params: make(map[string]string)}
+}
+
+// Parse accept params `str` returning an
+// object with `.value`, `.quality` and `.params`.
+// also includes `.originalIndex` for stable sorting
+func acceptParams(str string, index int) AcceptParams {
+	parts := acceptParamsRegexp.Split(str, -1)
+	ret := AcceptParams{parts[0], 1, make(map[string]string), index}
+
+	for i := 1; i < len(parts); i++ {
+		pms := acceptParamsPartsRegexp.Split(parts[i], -1)
+		if "q" == pms[0] {
+			q, err := strconv.ParseFloat(pms[1], 64)
+			if err != nil {
+				ret.Quality = q
+			}
+		} else {
+			ret.Params[pms[0]] = pms[1]
+		}
+	}
+
+	return ret
 }

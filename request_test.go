@@ -8,15 +8,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
-	"regexp"
 	"testing"
 
 	"github.com/soongo/negotiator"
-)
-
-var (
-	dotRegexp       = regexp.MustCompile("\\s*,\\s*")
-	testErrorFormat = "got `%v`, expect `%v`"
 )
 
 func TestRequest_Accepts(t *testing.T) {

@@ -8,14 +8,16 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/soongo/soon/renderer"
 	"github.com/soongo/soon/util"
 )
 
-// Context is the most important part of soon. It allows us to pass variables between middleware,
-// manage the flow, validate the JSON of a request and render a JSON response for example.
+// Context is the most important part of soon.
+// It allows us to pass variables between middleware, manage the flow,
+// validate the JSON of a request and render a JSON response for example.
 type Context struct {
 	*Request
 	http.ResponseWriter
@@ -187,11 +189,53 @@ func (c *Context) End() {
 	c.finished = true
 }
 
+// Format responds to the Acceptable formats using an `map`
+// of mime-type callbacks.
+//
+// This method uses `req.accepted`, an array of acceptable types ordered by
+// their quality values. When "Accept" is not present the _first_ callback is
+// invoked, otherwise the first match is used. When no match is performed the
+// server responds with 406 "Not Acceptable".
+//
+// Content-Type is set for you, however you may alter this within the callback
+// using `c.Type()` or `c.Set("Content-Type", ...)`.
+
+// By default Soon passes an `error` with a `.status` of 406 to `Next(err)`
+// if a match is not made. If you provide a `.default` callback it will be
+// invoked instead.
 func (c *Context) Format(m map[string]Handle) {
-	k := "Accept"
-	//accept := c.Get()
-	util.Vary(c, []string{k})
-	//for k
+	defaultHandler := m["default"]
+	if defaultHandler != nil {
+		handles := make(map[string]Handle, len(m))
+		for k, v := range m {
+			handles[k] = v
+		}
+		m = handles
+	}
+	delete(m, "default")
+	keys, i := make([]string, len(m), len(m)), 0
+	for k := range m {
+		keys[i] = k
+		i++
+	}
+	sort.Strings(keys)
+	var acceptsKeys []string
+	if len(keys) > 0 {
+		acceptsKeys = c.Accepts(keys...)
+	}
+
+	util.Vary(c, []string{"Accept"})
+
+	if len(acceptsKeys) > 0 {
+		key := acceptsKeys[0]
+		c.Set("Content-Type", util.NormalizeType(key).Value)
+		m[key](c)
+	} else if defaultHandler != nil {
+		defaultHandler(c)
+	} else {
+		status := http.StatusNotAcceptable
+		c.Next(&statusError{http.StatusText(status), status})
+	}
 }
 
 // Sends string body
