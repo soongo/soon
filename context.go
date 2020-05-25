@@ -19,8 +19,8 @@ import (
 // It allows us to pass variables between middleware, manage the flow,
 // validate the JSON of a request and render a JSON response for example.
 type Context struct {
-	*Request
-	http.ResponseWriter
+	Request  *Request
+	Response http.ResponseWriter
 
 	next Next
 
@@ -40,7 +40,7 @@ type Context struct {
 }
 
 func NewContext(req *http.Request, res http.ResponseWriter) *Context {
-	c := &Context{Request: NewRequest(req), ResponseWriter: res}
+	c := &Context{Request: NewRequest(req), Response: res}
 	c.init()
 	return c
 }
@@ -66,6 +66,11 @@ func (c *Context) init() {
 	c.Locals = make(Locals, 0)
 }
 
+// Params is a shortcut method for getting params of request
+func (c *Context) Params() Params {
+	return c.Request.Params
+}
+
 // Appends the specified value to the HTTP response header field.
 // If the header is not already set, it creates the header with the
 // specified value. The value parameter can be a string or a string slice.
@@ -73,10 +78,10 @@ func (c *Context) init() {
 // header value.
 func (c *Context) Append(key string, value interface{}) {
 	if s, ok := value.(string); ok {
-		c.Header().Add(key, s)
+		c.Response.Header().Add(key, s)
 	} else if arr, ok := value.([]string); ok {
 		for _, s := range arr {
-			c.Header().Add(key, s)
+			c.Response.Header().Add(key, s)
 		}
 	}
 }
@@ -85,7 +90,7 @@ func (c *Context) Append(key string, value interface{}) {
 // If there are no values associated with the key, Get returns "".
 // It is case insensitive
 func (c *Context) Get(field string) string {
-	return c.Header().Get(field)
+	return c.Response.Header().Get(field)
 }
 
 // Set sets the response header entries associated with key to the
@@ -94,12 +99,12 @@ func (c *Context) Get(field string) string {
 //
 // To set multiple fields at once, pass a string map as the parameter.
 func (c *Context) Set(value ...interface{}) {
-	util.SetHeader(c, value...)
+	util.SetHeader(c.Response, value...)
 }
 
 // Status sets the HTTP status for the response.
 func (c *Context) Status(code int) {
-	c.WriteHeader(code)
+	c.Response.WriteHeader(code)
 }
 
 // SendStatus sets the response HTTP status code to statusCode and
@@ -113,7 +118,7 @@ func (c *Context) SendStatus(code int) {
 // by LookupMimeType() for the specified type. If type contains the
 // “/” character, then it sets the Content-Type to type.
 func (c *Context) Type(s string) {
-	util.SetContentType(c, s)
+	util.SetContentType(c.Response, s)
 }
 
 // Sets the HTTP response Content-Disposition header field to “attachment”.
@@ -131,7 +136,7 @@ func (c *Context) Attachment(filename ...string) {
 
 // Cookie sets cookie.
 func (c *Context) Cookie(cookie *http.Cookie) {
-	http.SetCookie(c, cookie)
+	http.SetCookie(c.Response, cookie)
 }
 
 // ClearCookie clears the specified cookie.
@@ -141,7 +146,7 @@ func (c *Context) ClearCookie(cookie *http.Cookie) {
 		p = "/"
 	}
 
-	http.SetCookie(c, &http.Cookie{
+	http.SetCookie(c.Response, &http.Cookie{
 		Name:    cookie.Name,
 		Value:   "",
 		Path:    p,
@@ -221,10 +226,10 @@ func (c *Context) Format(m map[string]Handle) {
 	sort.Strings(keys)
 	var acceptsKeys []string
 	if len(keys) > 0 {
-		acceptsKeys = c.Accepts(keys...)
+		acceptsKeys = c.Request.Accepts(keys...)
 	}
 
-	util.Vary(c, []string{"Accept"})
+	util.Vary(c.Response, []string{"Accept"})
 
 	if len(acceptsKeys) > 0 {
 		key := acceptsKeys[0]
@@ -258,17 +263,17 @@ func (c *Context) Json(v interface{}) {
 // sets the common http header.
 func (c *Context) renderHeader() {
 	c.HeadersSent = true
-	c.Header().Set("Connection", "keep-alive")
-	c.Header().Set("X-Powered-By", "Soon")
+	c.Response.Header().Set("Connection", "keep-alive")
+	c.Response.Header().Set("X-Powered-By", "Soon")
 }
 
 // Render uses the specified renderer to deal with http response body.
 func (c *Context) Render(renderer renderer.Renderer) {
 	if !c.finished {
 		c.renderHeader()
-		renderer.RenderHeader(c)
+		renderer.RenderHeader(c.Response)
 
-		if err := renderer.Render(c); err != nil {
+		if err := renderer.Render(c.Response); err != nil {
 			c.Status(http.StatusInternalServerError)
 			panic(err)
 		}

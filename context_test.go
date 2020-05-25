@@ -27,7 +27,7 @@ var (
 )
 
 func TestContext_HeadersSent(t *testing.T) {
-	c := &Context{ResponseWriter: httptest.NewRecorder()}
+	c := &Context{Response: httptest.NewRecorder()}
 	if c.HeadersSent != false {
 		t.Errorf(testErrorFormat, c.HeadersSent, false)
 	}
@@ -40,7 +40,7 @@ func TestContext_HeadersSent(t *testing.T) {
 
 func TestContext_Locals(t *testing.T) {
 	key, expected := "foo", "bar"
-	c := &Context{ResponseWriter: httptest.NewRecorder()}
+	c := &Context{Response: httptest.NewRecorder()}
 	c.init()
 	c.Locals.Set(key, expected)
 	result := c.Locals.Get(key)
@@ -52,9 +52,9 @@ func TestContext_Locals(t *testing.T) {
 func TestContext_Append(t *testing.T) {
 	t.Run("normal", func(t *testing.T) {
 		k, expected := "Content-Type", "application/json"
-		res := &Context{ResponseWriter: httptest.NewRecorder()}
-		res.Append(k, expected)
-		result := res.Get(k)
+		c := &Context{Response: httptest.NewRecorder()}
+		c.Append(k, expected)
+		result := c.Get(k)
 		if result != expected {
 			t.Errorf(testErrorFormat, result, expected)
 		}
@@ -62,9 +62,9 @@ func TestContext_Append(t *testing.T) {
 
 	t.Run("custom", func(t *testing.T) {
 		k, expected := "x-custom", "custom"
-		res := &Context{ResponseWriter: httptest.NewRecorder()}
-		res.Append(k, expected)
-		result := res.Get(k)
+		c := &Context{Response: httptest.NewRecorder()}
+		c.Append(k, expected)
+		result := c.Get(k)
 		if result != expected {
 			t.Errorf(testErrorFormat, result, expected)
 		}
@@ -72,15 +72,15 @@ func TestContext_Append(t *testing.T) {
 
 	t.Run("multiple", func(t *testing.T) {
 		k, expected := "Content-Type", "application/json"
-		res := &Context{ResponseWriter: httptest.NewRecorder()}
-		res.Append(k, []string{expected, expected})
-		result := res.Get(k)
+		c := &Context{Response: httptest.NewRecorder()}
+		c.Append(k, []string{expected, expected})
+		result := c.Get(k)
 		if result != expected {
 			t.Errorf(testErrorFormat, result, expected)
 		}
 
 		m := map[string][]string{k: {expected, expected}}
-		r := map[string][]string(res.Header())
+		r := map[string][]string(c.Response.Header())
 		if !headerEquals(m, r) {
 			t.Errorf(testErrorFormat, r, m)
 		}
@@ -91,19 +91,19 @@ func TestContext_Set(t *testing.T) {
 	k, expected := "Content-Type", "application/json; charset=UTF-8"
 
 	t.Run("normal", func(t *testing.T) {
-		res := &Context{ResponseWriter: httptest.NewRecorder()}
-		res.Set(k, expected)
-		result := res.Get(k)
+		c := &Context{Response: httptest.NewRecorder()}
+		c.Set(k, expected)
+		result := c.Get(k)
 		if result != expected {
 			t.Errorf(testErrorFormat, result, expected)
 		}
 	})
 
 	t.Run("replace", func(t *testing.T) {
-		res := &Context{ResponseWriter: httptest.NewRecorder()}
-		res.Header().Set(k, "text/plain")
-		res.Set(k, expected)
-		result := res.Get(k)
+		c := &Context{Response: httptest.NewRecorder()}
+		c.Response.Header().Set(k, "text/plain")
+		c.Set(k, expected)
+		result := c.Get(k)
 		if result != expected {
 			t.Errorf(testErrorFormat, result, expected)
 		}
@@ -114,9 +114,9 @@ func TestContext_Set(t *testing.T) {
 			"Content-Type": "application/json; charset=UTF-8",
 			"X-Custom":     "custom",
 		}
-		res := &Context{ResponseWriter: httptest.NewRecorder()}
-		res.Set(m)
-		result, expected := res.Header(), mapToHeader(m)
+		c := &Context{Response: httptest.NewRecorder()}
+		c.Set(m)
+		result, expected := c.Response.Header(), mapToHeader(m)
 		if !headerEquals(result, expected) {
 			t.Errorf(testErrorFormat, result, expected)
 		}
@@ -125,14 +125,14 @@ func TestContext_Set(t *testing.T) {
 
 func TestContext_Get(t *testing.T) {
 	k, expected := "Content-Type", "application/json"
-	res := &Context{ResponseWriter: httptest.NewRecorder()}
-	result := res.Get(k)
+	c := &Context{Response: httptest.NewRecorder()}
+	result := c.Get(k)
 	if result != "" {
 		t.Errorf("got `%s`, expect `%v`", result, expected)
 	}
 
-	res.Header().Set(k, expected)
-	result = res.Get(k)
+	c.Response.Header().Set(k, expected)
+	result = c.Get(k)
 	if result != expected {
 		t.Errorf("got `%s`, expect `%v`", result, expected)
 	}
@@ -140,9 +140,9 @@ func TestContext_Get(t *testing.T) {
 
 func TestContext_Status(t *testing.T) {
 	expected := 404
-	res := &Context{ResponseWriter: httptest.NewRecorder()}
-	res.Status(expected)
-	recorder := res.ResponseWriter.(*httptest.ResponseRecorder)
+	c := &Context{Response: httptest.NewRecorder()}
+	c.Status(expected)
+	recorder := c.Response.(*httptest.ResponseRecorder)
 	result := recorder.Code
 	if result != expected {
 		t.Errorf("got `%d`, expect `%d`", result, expected)
@@ -152,9 +152,9 @@ func TestContext_Status(t *testing.T) {
 func TestContext_SendStatus(t *testing.T) {
 	expectedCode := 302
 	expectedBody := http.StatusText(expectedCode)
-	res := &Context{ResponseWriter: httptest.NewRecorder()}
-	res.SendStatus(expectedCode)
-	recorder := res.ResponseWriter.(*httptest.ResponseRecorder)
+	c := &Context{Response: httptest.NewRecorder()}
+	c.SendStatus(expectedCode)
+	recorder := c.Response.(*httptest.ResponseRecorder)
 	resultCode, resultBody := recorder.Code, recorder.Body.String()
 	if resultCode != expectedCode {
 		t.Errorf("got `%d`, expect `%d`", resultCode, expectedCode)
@@ -168,15 +168,15 @@ func TestContext_Type(t *testing.T) {
 	k := "Content-Type"
 	t.Run("normal", func(t *testing.T) {
 		expected := "text/html; charset=UTF-8"
-		res := &Context{ResponseWriter: httptest.NewRecorder()}
-		res.Type("html")
-		result := res.Get(k)
+		c := &Context{Response: httptest.NewRecorder()}
+		c.Type("html")
+		result := c.Get(k)
 		if result != expected {
 			t.Errorf(testErrorFormat, result, expected)
 		}
 
-		res.Type("index.html")
-		result = res.Get(k)
+		c.Type("index.html")
+		result = c.Get(k)
 		if result != expected {
 			t.Errorf(testErrorFormat, result, expected)
 		}
@@ -184,16 +184,16 @@ func TestContext_Type(t *testing.T) {
 
 	t.Run("slash", func(t *testing.T) {
 		expected := "image/png"
-		res := &Context{ResponseWriter: httptest.NewRecorder()}
-		res.Type(expected)
-		result := res.Get(k)
+		c := &Context{Response: httptest.NewRecorder()}
+		c.Type(expected)
+		result := c.Get(k)
 		if result != expected {
 			t.Errorf(testErrorFormat, result, expected)
 		}
 
 		expected = "/"
-		res.Type(expected)
-		result = res.Get(k)
+		c.Type(expected)
+		result = c.Get(k)
 		if result != expected {
 			t.Errorf(testErrorFormat, result, expected)
 		}
@@ -201,9 +201,9 @@ func TestContext_Type(t *testing.T) {
 
 	t.Run("empty", func(t *testing.T) {
 		expected := "application/octet-stream"
-		res := &Context{ResponseWriter: httptest.NewRecorder()}
-		res.Type("")
-		result := res.Get(k)
+		c := &Context{Response: httptest.NewRecorder()}
+		c.Type("")
+		result := c.Get(k)
 		if result != expected {
 			t.Errorf(testErrorFormat, result, expected)
 		}
@@ -215,9 +215,9 @@ func TestContext_Attachment(t *testing.T) {
 	t.Run("name", func(t *testing.T) {
 		name := "foo.png"
 		expected := fmt.Sprintf("attachment; filename=\"%s\"", name)
-		res := &Context{ResponseWriter: httptest.NewRecorder()}
-		res.Attachment(name)
-		result := res.Get(k)
+		c := &Context{Response: httptest.NewRecorder()}
+		c.Attachment(name)
+		result := c.Get(k)
 		if result != expected {
 			t.Errorf(testErrorFormat, result, expected)
 		}
@@ -225,9 +225,9 @@ func TestContext_Attachment(t *testing.T) {
 
 	t.Run("empty", func(t *testing.T) {
 		expected := "attachment"
-		res := &Context{ResponseWriter: httptest.NewRecorder()}
-		res.Attachment()
-		result := res.Get(k)
+		c := &Context{Response: httptest.NewRecorder()}
+		c.Attachment()
+		result := c.Get(k)
 		if result != expected {
 			t.Errorf(testErrorFormat, result, expected)
 		}
@@ -236,10 +236,10 @@ func TestContext_Attachment(t *testing.T) {
 
 func TestContext_Cookie(t *testing.T) {
 	k, expected := "Set-Cookie", "foo=bar; Path=/; HttpOnly"
-	res := &Context{ResponseWriter: httptest.NewRecorder()}
-	c := &http.Cookie{Name: "foo", Value: "bar", Path: "/", HttpOnly: true}
-	res.Cookie(c)
-	result := res.Get(k)
+	c := &Context{Response: httptest.NewRecorder()}
+	cookie := &http.Cookie{Name: "foo", Value: "bar", Path: "/", HttpOnly: true}
+	c.Cookie(cookie)
+	result := c.Get(k)
 	if result != expected {
 		t.Errorf(testErrorFormat, result, expected)
 	}
@@ -247,24 +247,24 @@ func TestContext_Cookie(t *testing.T) {
 
 func TestContext_ClearCookie(t *testing.T) {
 	k, expected := "Set-Cookie", "foo=bar; Path=/; HttpOnly"
-	res := &Context{ResponseWriter: httptest.NewRecorder()}
-	c := &http.Cookie{Name: "foo", Value: "bar", Path: "/", HttpOnly: true}
-	res.Cookie(c)
-	result := res.Get(k)
+	c := &Context{Response: httptest.NewRecorder()}
+	cookie := &http.Cookie{Name: "foo", Value: "bar", Path: "/", HttpOnly: true}
+	c.Cookie(cookie)
+	result := c.Get(k)
 	if result != expected {
 		t.Errorf(testErrorFormat, result, expected)
 	}
 
-	res.ClearCookie(c)
-	c1 := &http.Cookie{
-		Name:    c.Name,
+	c.ClearCookie(cookie)
+	cookie1 := &http.Cookie{
+		Name:    cookie.Name,
 		Value:   "",
-		Path:    c.Path,
+		Path:    cookie.Path,
 		Expires: time.Unix(0, 0),
 	}
-	expects := []string{c.String(), c1.String()}
+	expects := []string{cookie.String(), cookie1.String()}
 
-	results := (map[string][]string(res.Header()))[k]
+	results := (map[string][]string(c.Response.Header()))[k]
 	if !reflect.DeepEqual(results, expects) {
 		t.Errorf(testErrorFormat, results, expects)
 	}
@@ -281,27 +281,27 @@ func TestContext_SendFile(t *testing.T) {
 		fileInfo, fileContent := getFileContent(filePath)
 		lastModified := fileInfo.ModTime().UTC().Format(http.TimeFormat)
 		k, expectedHeader := "Content-Type", "text/markdown; charset=UTF-8"
-		res := &Context{ResponseWriter: httptest.NewRecorder()}
-		res.SendFile(filePath, nil)
-		recorder := res.ResponseWriter.(*httptest.ResponseRecorder)
+		c := &Context{Response: httptest.NewRecorder()}
+		c.SendFile(filePath, nil)
+		recorder := c.Response.(*httptest.ResponseRecorder)
 		body := recorder.Body.String()
 		if body != fileContent {
 			t.Errorf(testErrorFormat, body, fileContent)
 		}
-		resultHeader := res.Get(k)
+		resultHeader := c.Get(k)
 		if resultHeader != expectedHeader {
 			t.Errorf(testErrorFormat, resultHeader, expectedHeader)
 		}
-		if res.Get("Last-Modified") != lastModified {
-			t.Errorf(testErrorFormat, res.Get("Last-Modified"), lastModified)
+		if c.Get("Last-Modified") != lastModified {
+			t.Errorf(testErrorFormat, c.Get("Last-Modified"), lastModified)
 		}
 	})
 
 	t.Run("hidden", func(t *testing.T) {
 		filePath := pwd + "/.travis.yml"
 		t.Run("default", func(t *testing.T) {
-			res := &Context{ResponseWriter: httptest.NewRecorder()}
-			recorder := res.ResponseWriter.(*httptest.ResponseRecorder)
+			c := &Context{Response: httptest.NewRecorder()}
+			recorder := c.Response.(*httptest.ResponseRecorder)
 			defer func() {
 				if err := recover(); err != nil {
 					if err != renderer.ErrNotFound {
@@ -312,13 +312,13 @@ func TestContext_SendFile(t *testing.T) {
 					}
 				}
 			}()
-			res.SendFile(filePath, nil)
+			c.SendFile(filePath, nil)
 		})
 		t.Run("allow", func(t *testing.T) {
-			res := &Context{ResponseWriter: httptest.NewRecorder()}
+			c := &Context{Response: httptest.NewRecorder()}
 			options := &renderer.FileOptions{DotfilesPolicy: renderer.DotfilesPolicyAllow}
-			res.SendFile(filePath, options)
-			recorder := res.ResponseWriter.(*httptest.ResponseRecorder)
+			c.SendFile(filePath, options)
+			recorder := c.Response.(*httptest.ResponseRecorder)
 			body := recorder.Body.String()
 			_, fileContent := getFileContent(filePath)
 			if recorder.Code != http.StatusOK {
@@ -329,9 +329,9 @@ func TestContext_SendFile(t *testing.T) {
 			}
 		})
 		t.Run("deny", func(t *testing.T) {
-			res := &Context{ResponseWriter: httptest.NewRecorder()}
+			c := &Context{Response: httptest.NewRecorder()}
 			options := &renderer.FileOptions{DotfilesPolicy: renderer.DotfilesPolicyDeny}
-			recorder := res.ResponseWriter.(*httptest.ResponseRecorder)
+			recorder := c.Response.(*httptest.ResponseRecorder)
 			defer func() {
 				if err := recover(); err != nil {
 					if err != renderer.ErrForbidden {
@@ -342,7 +342,7 @@ func TestContext_SendFile(t *testing.T) {
 					}
 				}
 			}()
-			res.SendFile(filePath, options)
+			c.SendFile(filePath, options)
 		})
 	})
 }
@@ -358,43 +358,43 @@ func TestContext_Download(t *testing.T) {
 		fileInfo, fileContent := getFileContent(filePath)
 		lastModified := fileInfo.ModTime().UTC().Format(http.TimeFormat)
 		k, expectedHeader := "Content-Type", "text/markdown; charset=UTF-8"
-		res := &Context{ResponseWriter: httptest.NewRecorder()}
-		res.Download(filePath, nil)
-		recorder := res.ResponseWriter.(*httptest.ResponseRecorder)
+		c := &Context{Response: httptest.NewRecorder()}
+		c.Download(filePath, nil)
+		recorder := c.Response.(*httptest.ResponseRecorder)
 		body := recorder.Body.String()
 		if body != fileContent {
 			t.Errorf(testErrorFormat, body, fileContent)
 		}
-		resultHeader := res.Get(k)
+		resultHeader := c.Get(k)
 		if resultHeader != expectedHeader {
 			t.Errorf(testErrorFormat, resultHeader, expectedHeader)
 		}
-		if res.Get("Last-Modified") != lastModified {
-			t.Errorf(testErrorFormat, res.Get("Last-Modified"), lastModified)
+		if c.Get("Last-Modified") != lastModified {
+			t.Errorf(testErrorFormat, c.Get("Last-Modified"), lastModified)
 		}
 		contentDisposition := `attachment; filename="README.md"`
-		if res.Get("Content-Disposition") != contentDisposition {
-			t.Errorf(testErrorFormat, res.Get("Content-Disposition"), contentDisposition)
+		if c.Get("Content-Disposition") != contentDisposition {
+			t.Errorf(testErrorFormat, c.Get("Content-Disposition"), contentDisposition)
 		}
 	})
 
 	t.Run("custom name", func(t *testing.T) {
-		res := &Context{ResponseWriter: httptest.NewRecorder()}
+		c := &Context{Response: httptest.NewRecorder()}
 		options := &renderer.FileOptions{Name: "custom-name"}
-		res.Download(filePath, options)
+		c.Download(filePath, options)
 		contentDisposition := `attachment; filename="` + options.Name + `"`
-		if res.Get("Content-Disposition") != contentDisposition {
-			t.Errorf(testErrorFormat, res.Get("Content-Disposition"), contentDisposition)
+		if c.Get("Content-Disposition") != contentDisposition {
+			t.Errorf(testErrorFormat, c.Get("Content-Disposition"), contentDisposition)
 		}
 	})
 }
 
 func TestContext_End(t *testing.T) {
 	t.Run("without end", func(t *testing.T) {
-		res := &Context{ResponseWriter: httptest.NewRecorder()}
-		res.Send("foo")
-		res.Send("bar")
-		recorder := res.ResponseWriter.(*httptest.ResponseRecorder)
+		c := &Context{Response: httptest.NewRecorder()}
+		c.Send("foo")
+		c.Send("bar")
+		recorder := c.Response.(*httptest.ResponseRecorder)
 		expected, body := "foobar", recorder.Body.String()
 		if body != expected {
 			t.Errorf(testErrorFormat, body, expected)
@@ -402,11 +402,11 @@ func TestContext_End(t *testing.T) {
 	})
 
 	t.Run("without end", func(t *testing.T) {
-		res := &Context{ResponseWriter: httptest.NewRecorder()}
-		res.Send("foo")
-		res.End()
-		res.Send("bar")
-		recorder := res.ResponseWriter.(*httptest.ResponseRecorder)
+		c := &Context{Response: httptest.NewRecorder()}
+		c.Send("foo")
+		c.End()
+		c.Send("bar")
+		recorder := c.Response.(*httptest.ResponseRecorder)
 		expected, body := "foo", recorder.Body.String()
 		if body != expected {
 			t.Errorf(testErrorFormat, body, expected)
@@ -514,14 +514,14 @@ func TestContext_Format(t *testing.T) {
 
 func TestContext_String(t *testing.T) {
 	k, expected, expectedHeader := "Content-Type", "foo", "text/plain; charset=utf-8"
-	res := &Context{ResponseWriter: httptest.NewRecorder()}
-	res.String(expected)
-	recorder := res.ResponseWriter.(*httptest.ResponseRecorder)
+	c := &Context{Response: httptest.NewRecorder()}
+	c.String(expected)
+	recorder := c.Response.(*httptest.ResponseRecorder)
 	result := recorder.Body.String()
 	if result != expected {
 		t.Errorf(testErrorFormat, result, expected)
 	}
-	resultHeader := res.Get(k)
+	resultHeader := c.Get(k)
 	if resultHeader != expectedHeader {
 		t.Errorf(testErrorFormat, resultHeader, expectedHeader)
 	}
@@ -538,14 +538,14 @@ func TestContext_Json(t *testing.T) {
 			Name      string
 			PageTotal uint16
 		}{"foo", 500}
-		res := &Context{ResponseWriter: httptest.NewRecorder()}
-		res.Json(book)
-		recorder := res.ResponseWriter.(*httptest.ResponseRecorder)
+		c := &Context{Response: httptest.NewRecorder()}
+		c.Json(book)
+		recorder := c.Response.(*httptest.ResponseRecorder)
 		result := recorder.Body.String()
 		if result != expected {
 			t.Errorf(testErrorFormat, result, expected)
 		}
-		resultHeader := res.Get(k)
+		resultHeader := c.Get(k)
 		if resultHeader != expectedHeader {
 			t.Errorf(testErrorFormat, resultHeader, expectedHeader)
 		}
@@ -559,14 +559,14 @@ func TestContext_Json(t *testing.T) {
 			Name      string `json:"name"`
 			PageTotal uint16 `json:"pageTotal"`
 		}{"foo", 500}
-		res := &Context{ResponseWriter: httptest.NewRecorder()}
-		res.Json(book)
-		recorder := res.ResponseWriter.(*httptest.ResponseRecorder)
+		c := &Context{Response: httptest.NewRecorder()}
+		c.Json(book)
+		recorder := c.Response.(*httptest.ResponseRecorder)
 		result := recorder.Body.String()
 		if result != expected {
 			t.Errorf(testErrorFormat, result, expected)
 		}
-		resultHeader := res.Get(k)
+		resultHeader := c.Get(k)
 		if resultHeader != expectedHeader {
 			t.Errorf(testErrorFormat, resultHeader, expectedHeader)
 		}
@@ -577,14 +577,14 @@ func TestContext_Render(t *testing.T) {
 	t.Run("string", func(t *testing.T) {
 		k, expected, expectedHeader := "Content-Type", "foo", "text/plain; charset=utf-8"
 		r := renderer.String{Data: "foo"}
-		res := &Context{ResponseWriter: httptest.NewRecorder()}
-		res.Render(r)
-		recorder := res.ResponseWriter.(*httptest.ResponseRecorder)
+		c := &Context{Response: httptest.NewRecorder()}
+		c.Render(r)
+		recorder := c.Response.(*httptest.ResponseRecorder)
 		result := recorder.Body.String()
 		if result != expected {
 			t.Errorf(testErrorFormat, result, expected)
 		}
-		resultHeader := res.Get(k)
+		resultHeader := c.Get(k)
 		if resultHeader != expectedHeader {
 			t.Errorf(testErrorFormat, resultHeader, expectedHeader)
 		}
@@ -601,14 +601,14 @@ func TestContext_Render(t *testing.T) {
 				PageTotal uint16
 			}{"foo", 500}
 			r := renderer.JSON{Data: book}
-			res := &Context{ResponseWriter: httptest.NewRecorder()}
-			res.Render(r)
-			recorder := res.ResponseWriter.(*httptest.ResponseRecorder)
+			c := &Context{Response: httptest.NewRecorder()}
+			c.Render(r)
+			recorder := c.Response.(*httptest.ResponseRecorder)
 			result := recorder.Body.String()
 			if result != expected {
 				t.Errorf(testErrorFormat, result, expected)
 			}
-			resultHeader := res.Get(k)
+			resultHeader := c.Get(k)
 			if resultHeader != expectedHeader {
 				t.Errorf(testErrorFormat, resultHeader, expectedHeader)
 			}
@@ -623,14 +623,14 @@ func TestContext_Render(t *testing.T) {
 				PageTotal uint16 `json:"pageTotal"`
 			}{"foo", 500}
 			r := renderer.JSON{Data: book}
-			res := &Context{ResponseWriter: httptest.NewRecorder()}
-			res.Render(r)
-			recorder := res.ResponseWriter.(*httptest.ResponseRecorder)
+			c := &Context{Response: httptest.NewRecorder()}
+			c.Render(r)
+			recorder := c.Response.(*httptest.ResponseRecorder)
 			result := recorder.Body.String()
 			if result != expected {
 				t.Errorf(testErrorFormat, result, expected)
 			}
-			resultHeader := res.Get(k)
+			resultHeader := c.Get(k)
 			if resultHeader != expectedHeader {
 				t.Errorf(testErrorFormat, resultHeader, expectedHeader)
 			}

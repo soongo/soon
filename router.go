@@ -39,14 +39,14 @@ func (n *node) initRegexp() {
 
 func (n *node) buildRequestParams(c *Context) {
 	if len(n.tokens) > 0 {
-		c.resetParams()
-		match, err := n.regexp.FindStringMatch(c.URL.Path)
+		c.Request.resetParams()
+		match, err := n.regexp.FindStringMatch(c.Request.URL.Path)
 		if err != nil {
 			panic(err)
 		}
 		for i, g := range match.Groups() {
 			if i > 0 {
-				c.Params.Set(n.tokens[i-1].Name, g.String())
+				c.Request.Params.Set(n.tokens[i-1].Name, g.String())
 			}
 		}
 	}
@@ -97,7 +97,7 @@ func defaultErrorHandler(v interface{}, c *Context) {
 	case string:
 		text = err
 	}
-	http.Error(c.ResponseWriter, text, status)
+	http.Error(c.Response, text, status)
 }
 
 // NewRouter returns a new initialized Router with default configuration.

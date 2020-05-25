@@ -47,7 +47,7 @@ func main() {
 	})
 
 	app.GET("/:foo", func(c *soon.Context) {
-		c.Send(c.Params.Get("foo"))
+		c.Send(c.Params().Get("foo"))
 	})
 
 	// an example error handler
@@ -59,7 +59,7 @@ func main() {
 		case string:
 			msg = err
 		}
-		c.WriteHeader(500)
+		c.Status(500)
 		c.Send(msg)
 	})
 

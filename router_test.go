@@ -37,10 +37,10 @@ var methods = []string{
 func makeHandle(t test) Handle {
 	return func(c *Context) {
 		for k, v := range t.header {
-			c.Header().Set(k, v)
+			c.Response.Header().Set(k, v)
 		}
 		if t.statusCode != 0 {
-			c.WriteHeader(t.statusCode)
+			c.Response.WriteHeader(t.statusCode)
 		}
 		if t.body != "" {
 			c.Send(t.body)
@@ -80,7 +80,7 @@ func getWantStatusCode(statusCode int) int {
 }
 
 func notFound(c *Context) {
-	http.Error(c, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+	http.Error(c.Response, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 }
 
 func TestRouterWithDefaultOptions(t *testing.T) {
