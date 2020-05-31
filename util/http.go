@@ -19,15 +19,32 @@ var (
 )
 
 // AcceptParams is an object with `.value`, `.quality` and `.params`.
-// also includes `.originalIndex` for stable sorting
 type AcceptParams struct {
-	Value         string
-	Quality       float64
-	Params        map[string]string
-	OriginalIndex int
+	Value   string
+	Quality float64
+	Params  map[string]string
 }
 
-// Sets the response’s HTTP header field to value.
+// AddHeader adds the specified value to the HTTP response header field.
+// If the header is not already set, it creates the header with the specified
+// value. The value parameter can be a string or a string slice.
+func AddHeader(w http.ResponseWriter, k string, v interface{}) {
+	if s, ok := v.(string); ok {
+		if strings.ToLower(k) == "content-type" && !charsetRegexp.MatchString(s) {
+			charset := LookupCharset(strings.Split(s, ";")[0])
+			if charset != "" {
+				s += "; charset=" + charset
+			}
+		}
+		w.Header().Add(k, s)
+	} else if arr, ok := v.([]string); ok {
+		for _, s := range arr {
+			AddHeader(w, k, s)
+		}
+	}
+}
+
+// SetHeader sets the response’s HTTP header field to value.
 // To set multiple fields at once, pass a string map as the parameter.
 func SetHeader(w http.ResponseWriter, value ...interface{}) {
 	if len(value) == 2 {
@@ -40,14 +57,22 @@ func SetHeader(w http.ResponseWriter, value ...interface{}) {
 					}
 				}
 				w.Header().Set(k, v)
+			} else if arr, ok := value[1].([]string); ok {
+				for i, v := range arr {
+					if i == 0 {
+						SetHeader(w, k, v)
+					} else {
+						AddHeader(w, k, v)
+					}
+				}
 			}
 		}
 		return
 	}
 
 	if len(value) == 1 {
-		if arr, ok := value[0].(map[string]string); ok {
-			for k, v := range arr {
+		if m, ok := value[0].(map[string]string); ok {
+			for k, v := range m {
 				SetHeader(w, k, v)
 			}
 		}
@@ -153,24 +178,26 @@ func NormalizeType(t string) AcceptParams {
 	if strings.Index(t, "/") >= 0 {
 		return acceptParams(t, 0)
 	}
-	return AcceptParams{Value: LookupMimeType(t), Params: make(map[string]string)}
+	return AcceptParams{Value: LookupMimeType(t)}
 }
 
 // Parse accept params `str` returning an
 // object with `.value`, `.quality` and `.params`.
-// also includes `.originalIndex` for stable sorting
 func acceptParams(str string, index int) AcceptParams {
 	parts := acceptParamsRegexp.Split(str, -1)
-	ret := AcceptParams{parts[0], 1, make(map[string]string), index}
+	ret := AcceptParams{Value: parts[0], Quality: 1}
 
 	for i := 1; i < len(parts); i++ {
 		pms := acceptParamsPartsRegexp.Split(parts[i], -1)
 		if "q" == pms[0] {
 			q, err := strconv.ParseFloat(pms[1], 64)
-			if err != nil {
+			if err == nil {
 				ret.Quality = q
 			}
 		} else {
+			if ret.Params == nil {
+				ret.Params = make(map[string]string)
+			}
 			ret.Params[pms[0]] = pms[1]
 		}
 	}

@@ -7,6 +7,7 @@ package soon
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"sort"
 	"time"
@@ -52,13 +53,13 @@ func (c *Context) Next(v ...interface{}) {
 	c.next(v...)
 }
 
-type Locals map[interface{}]interface{}
+type Locals map[string]interface{}
 
-func (l Locals) Get(k interface{}) interface{} {
+func (l Locals) Get(k string) interface{} {
 	return l[k]
 }
 
-func (l Locals) Set(k interface{}, v interface{}) {
+func (l Locals) Set(k string, v interface{}) {
 	l[k] = v
 }
 
@@ -71,19 +72,18 @@ func (c *Context) Params() Params {
 	return c.Request.Params
 }
 
+// Query is a shortcut method for getting query of request
+func (c *Context) Query() url.Values {
+	return c.Request.URL.Query()
+}
+
 // Appends the specified value to the HTTP response header field.
 // If the header is not already set, it creates the header with the
 // specified value. The value parameter can be a string or a string slice.
 // Note: calling c.Set() after c.Append() will reset the previously-set
 // header value.
 func (c *Context) Append(key string, value interface{}) {
-	if s, ok := value.(string); ok {
-		c.Response.Header().Add(key, s)
-	} else if arr, ok := value.([]string); ok {
-		for _, s := range arr {
-			c.Response.Header().Add(key, s)
-		}
-	}
+	util.AddHeader(c.Response, key, value)
 }
 
 // Get gets the first value of response header associated with the given key.

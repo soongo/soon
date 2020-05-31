@@ -16,6 +16,6 @@ type Renderer interface {
 }
 
 var (
-	_ Renderer = JSON{}
 	_ Renderer = String{}
+	_ Renderer = JSON{}
 )

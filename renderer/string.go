@@ -23,8 +23,6 @@ func (s String) RenderHeader(w http.ResponseWriter) {
 
 // Renderer writes data with custom ContentType.
 func (s String) Render(w http.ResponseWriter) error {
-	if _, err := io.WriteString(w, s.Data); err != nil {
-		panic(err)
-	}
-	return nil
+	_, err := io.WriteString(w, s.Data)
+	return err
 }

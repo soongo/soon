@@ -17,9 +17,8 @@ func TestLookupMimeType(t *testing.T) {
 	}
 
 	for k, v := range tests {
-		result := LookupMimeType(k)
-		if result != v {
-			t.Errorf(testErrorFormat, result, v)
+		if got := LookupMimeType(k); got != v {
+			t.Errorf(testErrorFormat, got, v)
 		}
 	}
 }
@@ -37,9 +36,9 @@ func TestLookupCharset(t *testing.T) {
 	}
 
 	for k, v := range tests {
-		result := LookupCharset(k)
-		if result != v {
-			t.Errorf(testErrorFormat, result, v)
+
+		if got := LookupCharset(k); got != v {
+			t.Errorf(testErrorFormat, got, v)
 		}
 	}
 }

@@ -41,12 +41,11 @@ func (n *node) buildRequestParams(c *Context) {
 	if len(n.tokens) > 0 {
 		c.Request.resetParams()
 		match, err := n.regexp.FindStringMatch(c.Request.URL.Path)
-		if err != nil {
-			panic(err)
-		}
-		for i, g := range match.Groups() {
-			if i > 0 {
-				c.Request.Params.Set(n.tokens[i-1].Name, g.String())
+		if err == nil {
+			for i, g := range match.Groups() {
+				if i > 0 {
+					c.Request.Params.Set(n.tokens[i-1].Name, g.String())
+				}
 			}
 		}
 	}
@@ -54,10 +53,7 @@ func (n *node) buildRequestParams(c *Context) {
 
 func (n *node) match(path string) bool {
 	m, err := n.regexp.MatchString(path)
-	if err != nil {
-		panic(err)
-	}
-	return m
+	return err == nil && m
 }
 
 func (n *node) isErrorHandler() bool {
@@ -104,15 +100,6 @@ func defaultErrorHandler(v interface{}, c *Context) {
 // Sensitive and Strict is false by default.
 func NewRouter() *Router {
 	return &Router{}
-}
-
-func (r *Router) hasRoute(method, route string) bool {
-	for _, v := range r.routes {
-		if !v.isMiddleware && v.method == method && v.match(route) {
-			return true
-		}
-	}
-	return false
 }
 
 func (r *Router) initOptions() {
@@ -277,6 +264,8 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	c := NewContext(req, w)
 	i, urlPath := -1, req.URL.Path
 	c.next = func(v ...interface{}) {
+		defer r.recv(c)
+
 		if i++; i >= len(r.routes) {
 			if len(v) > 0 && v[0] != nil {
 				defaultErrorHandler(v[0], c)
@@ -307,8 +296,6 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 		c.next(v...)
 	}
-
-	defer r.recv(c)
 
 	c.next()
 }

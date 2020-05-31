@@ -117,12 +117,12 @@ func (f File) Render(w http.ResponseWriter) error {
 	}
 
 	file, err := os.Open(absPath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
+	if err == nil {
+		defer file.Close()
 
-	util.SetContentType(w, filepath.Ext(filePath))
-	_, err = io.Copy(w, file)
+		util.SetContentType(w, filepath.Ext(filePath))
+		_, err = io.Copy(w, file)
+	}
+
 	return err
 }

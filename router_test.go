@@ -5,24 +5,31 @@
 package soon
 
 import (
-	"fmt"
+	"errors"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
 type header map[string]string
 
 type test struct {
-	route      string
-	path       string
-	statusCode int
-	header     header
-	body       string
+	route       string
+	path        string
+	statusCode  int
+	header      header
+	body        string
+	middleware  func(c *Context)
+	err         interface{}
+	errorHandle func(v interface{}, c *Context)
 }
 
-const system404Body = "404 page not found\n"
+const (
+	body200 = `{"alive": true}`
+	body404 = "404 page not found"
+)
 
 var methods = []string{
 	http.MethodGet,
@@ -36,8 +43,12 @@ var methods = []string{
 
 func makeHandle(t test) Handle {
 	return func(c *Context) {
+		if t.err != nil {
+			panic(t.err)
+		}
+
 		for k, v := range t.header {
-			c.Response.Header().Set(k, v)
+			c.Set(k, v)
 		}
 		if t.statusCode != 0 {
 			c.Response.WriteHeader(t.statusCode)
@@ -48,7 +59,8 @@ func makeHandle(t test) Handle {
 	}
 }
 
-func request(method, url string, h http.Header) (statusCode int, header http.Header, body string, err error) {
+func request(method, url string, h http.Header) (statusCode int,
+	header http.Header, body string, err error) {
 	req, err := http.NewRequest(method, url, nil)
 	if err != nil {
 		return
@@ -67,110 +79,91 @@ func request(method, url string, h http.Header) (statusCode int, header http.Hea
 		return
 	}
 
-	body = string(byteArray)
+	body = strings.TrimSpace(string(byteArray))
 
 	return
 }
 
-func getWantStatusCode(statusCode int) int {
-	if statusCode == 0 {
-		statusCode = http.StatusOK
-	}
-	return statusCode
-}
-
-func notFound(c *Context) {
-	http.Error(c.Response, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-}
-
 func TestRouterWithDefaultOptions(t *testing.T) {
 	tests := []test{
-		{route: "/", path: "/", body: "root page"},
-		{route: "/", path: "", statusCode: http.StatusOK, body: "root page"},
-		{route: "//", path: "/", statusCode: http.StatusNotFound, body: system404Body},
-		{route: "//", path: "//", body: "root page"},
-		{route: "//", path: "///", statusCode: http.StatusNotFound, body: system404Body},
-
-		{route: "", path: "/", body: "root page"},
-		{route: "", path: "", body: "root page"},
-
-		{route: "/health-check/", path: "/health-check/", statusCode: http.StatusOK,
-			header: header{"Content-Type": "application/json"}, body: `{"alive": true}`},
-		{route: "/health-check/", path: "/health-check", statusCode: http.StatusNotFound,
-			body: system404Body},
-		{route: "/health-check//", path: "/health-check/", statusCode: http.StatusNotFound,
-			body: system404Body},
-		{route: "/health-check//", path: "/health-check//", body: `{"alive": true}`},
-		{route: "/health-check//", path: "/health-check///", statusCode: http.StatusNotFound,
-			body: system404Body},
-
-		{route: "/health-check", path: "/health-check/", body: `{"alive": true}`},
-		{route: "/health-check", path: "/health-check", body: `{"alive": true}`},
+		{route: "/", path: "/", statusCode: 200, body: body200},
+		{route: "/", path: "", statusCode: 200, body: body200},
+		{route: "//", path: "/", statusCode: 404, body: body404},
+		{route: "//", path: "//", statusCode: 200, body: body200},
+		{route: "//", path: "///", statusCode: 404, body: body404},
+		{route: "", path: "/", statusCode: 200, body: body200},
+		{route: "", path: "", statusCode: 200, body: body200},
+		{
+			route:      "/health-check/",
+			path:       "/health-check/",
+			statusCode: 200,
+			header:     header{"Content-Type": "application/json; charset=UTF-8"},
+			body:       body200,
+		},
+		{route: "/health-check/", path: "/health-check", statusCode: 404, body: body404},
+		{route: "/health-check//", path: "/health-check/", statusCode: 404, body: body404},
+		{route: "/health-check//", path: "/health-check//", statusCode: 200, body: body200},
+		{route: "/health-check//", path: "/health-check///", statusCode: 404, body: body404},
+		{route: "/health-check", path: "/health-check/", statusCode: 200, body: body200},
+		{route: "/health-check", path: "/health-check", statusCode: 200, body: body200},
 	}
 
 	t.Run("one-by-one", func(t *testing.T) {
 		for _, tt := range tests {
-			tt := tt
 			t.Run("", func(t *testing.T) {
 				router := NewRouter()
 				router.GET(tt.route, makeHandle(tt))
 				server := httptest.NewServer(router)
 				defer server.Close()
 
-				statusCode, header, body, err := request(http.MethodGet, server.URL+tt.path, nil)
+				statusCode, header, body, err := request("GET", server.URL+tt.path, nil)
 				if err != nil {
 					t.Error(err)
 				}
-				wantStatusCode := getWantStatusCode(tt.statusCode)
-				if statusCode != wantStatusCode {
-					t.Errorf("handler returned wrong status code: got %v want %v",
-						statusCode, wantStatusCode)
+				if statusCode != tt.statusCode {
+					t.Errorf(testErrorFormat, statusCode, tt.statusCode)
 				}
 				for k, v := range tt.header {
 					if header.Get(k) != v {
-						t.Errorf("handler returned unexpected header of [%v]: got '%v' want '%v'",
-							k, header.Get(k), v)
+						t.Errorf(testErrorFormat, header.Get(k), v)
 					}
 				}
 				if body != tt.body {
-					t.Errorf("handler returned unexpected body: got '%v' want '%v'",
-						body, tt.body)
+					t.Errorf(testErrorFormat, body, tt.body)
 				}
 
-				statusCode, _, _, err = request(http.MethodHead, server.URL+tt.path, nil)
+				statusCode, _, _, err = request("HEAD", server.URL+tt.path, nil)
 				if err != nil {
 					t.Error(err)
 				}
-				if statusCode != http.StatusNotFound {
-					t.Errorf("handler returned wrong status code: got %v want %v",
-						statusCode, http.StatusNotFound)
+				if statusCode != 404 {
+					t.Errorf(testErrorFormat, statusCode, 404)
 				}
 			})
 		}
 	})
 
 	tests = []test{
-		{route: "/", path: "/", body: "root page"},
-		{route: "/", path: "", statusCode: http.StatusOK, body: "root page"},
-		{route: "//", path: "/", statusCode: http.StatusOK, body: "root page"},
-		{route: "//", path: "//", body: "root page"},
-		{route: "//", path: "///", statusCode: http.StatusOK, body: "root page"},
-
-		{route: "", path: "/", body: "root page"},
-		{route: "", path: "", body: "root page"},
-
-		{route: "/health-check/", path: "/health-check/", statusCode: http.StatusOK,
-			header: header{"Content-Type": "application/json"}, body: `{"alive": true}`},
-		{route: "/health-check/", path: "/health-check", statusCode: http.StatusOK,
-			body: `{"alive": true}`},
-		{route: "/health-check//", path: "/health-check/", statusCode: http.StatusOK,
-			body: `{"alive": true}`},
-		{route: "/health-check//", path: "/health-check//", body: `{"alive": true}`},
-		{route: "/health-check//", path: "/health-check///", statusCode: http.StatusOK,
-			body: `{"alive": true}`},
-
-		{route: "/health-check", path: "/health-check/", body: `{"alive": true}`},
-		{route: "/health-check", path: "/health-check", body: `{"alive": true}`},
+		{route: "/", path: "/", statusCode: 200, body: body200},
+		{route: "/", path: "", statusCode: 200, body: body200},
+		{route: "//", path: "/", statusCode: 200, body: body200},
+		{route: "//", path: "//", statusCode: 200, body: body200},
+		{route: "//", path: "///", statusCode: 200, body: body200},
+		{route: "", path: "/", statusCode: 200, body: body200},
+		{route: "", path: "", statusCode: 200, body: body200},
+		{
+			route:      "/health-check/",
+			path:       "/health-check/",
+			statusCode: 200,
+			header:     header{"Content-Type": "application/json; charset=UTF-8"},
+			body:       body200,
+		},
+		{route: "/health-check/", path: "/health-check", statusCode: 200, body: body200},
+		{route: "/health-check//", path: "/health-check/", statusCode: 200, body: body200},
+		{route: "/health-check//", path: "/health-check//", statusCode: 200, body: body200},
+		{route: "/health-check//", path: "/health-check///", statusCode: 200, body: body200},
+		{route: "/health-check", path: "/health-check/", statusCode: 200, body: body200},
+		{route: "/health-check", path: "/health-check", statusCode: 200, body: body200},
 	}
 
 	t.Run("all", func(t *testing.T) {
@@ -183,197 +176,307 @@ func TestRouterWithDefaultOptions(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run("", func(t *testing.T) {
-				statusCode, header, body, err := request(http.MethodGet, server.URL+tt.path, nil)
+				statusCode, header, body, err := request("GET", server.URL+tt.path, nil)
 				if err != nil {
 					t.Error(err)
 				}
-				wantStatusCode := getWantStatusCode(tt.statusCode)
-				if statusCode != wantStatusCode {
-					t.Errorf("handler returned wrong status code: got %v want %v",
-						statusCode, wantStatusCode)
+				if statusCode != tt.statusCode {
+					t.Errorf(testErrorFormat, statusCode, tt.statusCode)
 				}
 				for k, v := range tt.header {
 					if header.Get(k) != v {
-						t.Errorf("handler returned unexpected header of [%v]: got '%v' want '%v'",
-							k, header.Get(k), v)
+						t.Errorf(testErrorFormat, header.Get(k), v)
 					}
 				}
 				if body != tt.body {
-					t.Errorf("handler returned unexpected body: got '%v' want '%v'",
-						body, tt.body)
+					t.Errorf(testErrorFormat, body, tt.body)
 				}
 			})
 		}
 	})
 }
 
-func TestRouterWithTrailingSlashPolicyNone(t *testing.T) {
-	tests := []test{
-		{route: "/", path: "/", body: "root page"},
-		{route: "/", path: "", body: "root page"},
-		{route: "//", path: "/", statusCode: http.StatusNotFound, body: system404Body},
-		{route: "//", path: "", statusCode: http.StatusNotFound, body: system404Body},
-
-		{route: "", path: "/", body: "root page"},
-		{route: "", path: "", body: "root page"},
-		{route: "//", path: "/", statusCode: http.StatusNotFound, body: system404Body},
-		{route: "//", path: "", statusCode: http.StatusNotFound, body: system404Body},
-
-		{route: "/health-check/", path: "/health-check/", body: `{"alive": true}`},
-		{route: "/health-check/", path: "/health-check", statusCode: http.StatusNotFound,
-			body: system404Body},
-		{route: "/health-check//", path: "/health-check/", statusCode: http.StatusNotFound,
-			body: system404Body},
-		{route: "/health-check//", path: "/health-check", statusCode: http.StatusNotFound,
-			body: system404Body},
-
-		{route: "/health-check", path: "/health-check/", statusCode: http.StatusNotFound,
-			body: system404Body},
-		{route: "/health-check", path: "/health-check", body: `{"alive": true}`},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run("", func(t *testing.T) {
-			router := NewRouter()
-			router.GET(tt.route, makeHandle(tt))
-			server := httptest.NewServer(router)
-			defer server.Close()
-
-			statusCode, _, body, err := request(http.MethodGet, server.URL+tt.path, nil)
-			if err != nil {
-				t.Error(err)
-			}
-			wantStatusCode := getWantStatusCode(tt.statusCode)
-			if statusCode != wantStatusCode {
-				t.Errorf("handler returned wrong status code: got %v want %v",
-					statusCode, wantStatusCode)
-			}
-			if body != tt.body {
-				t.Errorf("handler returned unexpected body: got '%v' want '%v'",
-					body, tt.body)
-			}
-		})
-	}
-}
-
-func TestRouterWithCustomNotFound(t *testing.T) {
-	tests := []test{
-		{route: "/", path: "/", body: "root page"},
-		{route: "/", path: "/404", statusCode: http.StatusNotFound,
-			body: fmt.Sprintln(http.StatusText(http.StatusNotFound))},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run("", func(t *testing.T) {
-			router := NewRouter()
-			router.GET(tt.route, makeHandle(tt))
-			router.Use(notFound)
-			server := httptest.NewServer(router)
-			defer server.Close()
-
-			statusCode, _, body, err := request(http.MethodGet, server.URL+tt.path, nil)
-			if err != nil {
-				t.Error(err)
-			}
-			wantStatusCode := getWantStatusCode(tt.statusCode)
-			if statusCode != wantStatusCode {
-				t.Errorf("handler returned wrong status code: got %v want %v",
-					statusCode, wantStatusCode)
-			}
-			if body != tt.body {
-				t.Errorf("handler returned unexpected body: got '%v' want '%v'",
-					body, tt.body)
-			}
-		})
-	}
-}
-
 func TestRouterMiddleware(t *testing.T) {
-	test := test{route: "/", path: "/", body: "root page"}
-	middlewareBody := "middleware"
-	router := NewRouter()
-	router.Use(func(c *Context) {
-		c.Send(middlewareBody)
-	})
-	router.GET(test.route, makeHandle(test))
-	server := httptest.NewServer(router)
-	defer server.Close()
+	tests := []test{
+		{
+			route:      "/",
+			path:       "/",
+			statusCode: 200,
+			middleware: func(c *Context) {
+				c.Send(body200)
+			},
+		},
+		{
+			route:      "/",
+			path:       "/404",
+			statusCode: 404,
+			middleware: func(c *Context) {
+				http.Error(c.Response, body200, 404)
+			},
+		},
+		{
+			route:      "/",
+			path:       "/",
+			statusCode: 500,
+			middleware: func(c *Context) {
+				panic(body200)
+			},
+		},
+		{
+			route:      "/",
+			path:       "/",
+			statusCode: 500,
+			middleware: func(c *Context) {
+				c.Next(body200)
+			},
+		},
+		{
+			route:      "/",
+			path:       "/",
+			statusCode: 500,
+			err:        body200,
+		},
+		{
+			route:      "/",
+			path:       "/",
+			statusCode: 200,
+			err:        errors.New(body200),
+			errorHandle: func(v interface{}, c *Context) {
+				c.Send(v.(error).Error())
+			},
+		},
+		{
+			route:      "/",
+			path:       "/",
+			statusCode: 500,
+			err:        errors.New(body200),
+			errorHandle: func(v interface{}, c *Context) {
+				panic(v)
+			},
+		},
+		{
+			route:      "/",
+			path:       "/",
+			statusCode: 500,
+			err:        errors.New(body200),
+			errorHandle: func(v interface{}, c *Context) {
+				c.Next(v)
+			},
+		},
+	}
 
-	statusCode, _, body, err := request(http.MethodGet, server.URL+test.path, nil)
-	if err != nil {
-		t.Error(err)
-	}
-	if statusCode != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			statusCode, http.StatusOK)
-	}
-	if body != middlewareBody {
-		t.Errorf("handler returned unexpected body: got '%v' want '%v'",
-			body, middlewareBody)
+	for _, tt := range tests {
+		t.Run("", func(t *testing.T) {
+			router := NewRouter()
+			if tt.middleware != nil {
+				router.Use(tt.middleware)
+			}
+			router.GET(tt.route, makeHandle(tt))
+			if tt.errorHandle != nil {
+				router.Use(tt.errorHandle)
+			}
+			server := httptest.NewServer(router)
+			defer server.Close()
+
+			statusCode, _, body, err := request("GET", server.URL+tt.path, nil)
+			if err != nil {
+				t.Error(err)
+			}
+
+			if statusCode != tt.statusCode {
+				t.Errorf(testErrorFormat, statusCode, tt.statusCode)
+			}
+
+			if body != body200 {
+				t.Errorf(testErrorFormat, body, body200)
+			}
+		})
 	}
 }
 
 func TestRouterMethods(t *testing.T) {
+	tt := test{route: "/", path: "/", body: body200}
+	check := func(method, url string) {
+		statusCode, _, body, err := request(method, url, nil)
+		if err != nil {
+			t.Error(err)
+		}
+		if statusCode != 200 {
+			t.Errorf(testErrorFormat, statusCode, 200)
+		}
+		if method != "HEAD" && body != tt.body {
+			t.Errorf(testErrorFormat, body, tt.body)
+		}
+
+		for _, m := range methods {
+			if m != method {
+				statusCode, _, body, err = request(m, url, nil)
+				if err != nil {
+					t.Error(err)
+				}
+				if statusCode != 404 {
+					t.Errorf(testErrorFormat, statusCode, 404)
+				}
+				if m != "HEAD" && body != body404 {
+					t.Errorf(testErrorFormat, body, body404)
+				}
+			}
+		}
+	}
+
+	t.Run("GET", func(t *testing.T) {
+		router := NewRouter()
+		router.GET(tt.route, makeHandle(tt))
+		server := httptest.NewServer(router)
+		defer server.Close()
+		check("GET", server.URL+tt.path)
+	})
+
+	t.Run("HEAD", func(t *testing.T) {
+		router := NewRouter()
+		router.HEAD(tt.route, makeHandle(tt))
+		server := httptest.NewServer(router)
+		defer server.Close()
+		check("HEAD", server.URL+tt.path)
+	})
+
+	t.Run("POST", func(t *testing.T) {
+		router := NewRouter()
+		router.POST(tt.route, makeHandle(tt))
+		server := httptest.NewServer(router)
+		defer server.Close()
+		check("POST", server.URL+tt.path)
+	})
+
+	t.Run("PUT", func(t *testing.T) {
+		router := NewRouter()
+		router.PUT(tt.route, makeHandle(tt))
+		server := httptest.NewServer(router)
+		defer server.Close()
+		check("PUT", server.URL+tt.path)
+	})
+
+	t.Run("PATCH", func(t *testing.T) {
+		router := NewRouter()
+		router.PATCH(tt.route, makeHandle(tt))
+		server := httptest.NewServer(router)
+		defer server.Close()
+		check("PATCH", server.URL+tt.path)
+	})
+
+	t.Run("DELETE", func(t *testing.T) {
+		router := NewRouter()
+		router.DELETE(tt.route, makeHandle(tt))
+		server := httptest.NewServer(router)
+		defer server.Close()
+		check("DELETE", server.URL+tt.path)
+	})
+
+	t.Run("OPTIONS", func(t *testing.T) {
+		router := NewRouter()
+		router.OPTIONS(tt.route, makeHandle(tt))
+		server := httptest.NewServer(router)
+		defer server.Close()
+		check("OPTIONS", server.URL+tt.path)
+	})
+}
+
+func TestRouter_Handle(t *testing.T) {
 	for i, method := range methods {
 		t.Run(method, func(t *testing.T) {
-			test := test{route: "/", path: "/", body: "root page"}
+			tt := test{route: "/", path: "/", body: body200}
 			router := NewRouter()
-			router.Handle(method, test.route, makeHandle(test))
+			router.Handle(method, tt.route, makeHandle(tt))
 			server := httptest.NewServer(router)
 			defer server.Close()
 
-			statusCode, _, body, err := request(method, server.URL+test.path, nil)
+			statusCode, _, body, err := request(method, server.URL+tt.path, nil)
 			if err != nil {
 				t.Error(err)
 			}
-			if statusCode != http.StatusOK {
-				t.Errorf("handler returned wrong status code: got %v want %v",
-					statusCode, http.StatusOK)
+			if statusCode != 200 {
+				t.Errorf(testErrorFormat, statusCode, 200)
 			}
-			if method != http.MethodHead && body != test.body {
-				t.Errorf("handler returned unexpected body: got '%v' want '%v'",
-					body, test.body)
+			if method != "HEAD" && body != tt.body {
+				t.Errorf(testErrorFormat, body, tt.body)
 			}
 
 			method = methods[(i+1)%len(methods)]
-			statusCode, _, body, err = request(method, server.URL+test.path, nil)
+			statusCode, _, body, err = request(method, server.URL+tt.path, nil)
 			if err != nil {
 				t.Error(err)
 			}
-			if statusCode != http.StatusNotFound {
-				t.Errorf("handler returned wrong status code: got %v want %v",
-					statusCode, http.StatusNotFound)
+			if statusCode != 404 {
+				t.Errorf(testErrorFormat, statusCode, 404)
 			}
-			if method != http.MethodHead && body != system404Body {
-				t.Errorf("handler returned unexpected body: got '%v' want '%v'",
-					body, system404Body)
+			if method != "HEAD" && body != body404 {
+				t.Errorf(testErrorFormat, body, body404)
 			}
 		})
 	}
 }
 
-func TestRouterAll(t *testing.T) {
-	test := test{route: "/", path: "/", body: "root page"}
+func TestRouter_ALL(t *testing.T) {
+	tt := test{route: "/", path: "/", body: body200}
 	router := NewRouter()
-	router.ALL(test.route, makeHandle(test))
+	router.ALL(tt.route, makeHandle(tt))
 	server := httptest.NewServer(router)
 	defer server.Close()
 
 	for _, method := range methods {
 		t.Run(method, func(t *testing.T) {
-			statusCode, _, body, err := request(method, server.URL+test.path, nil)
+			statusCode, _, body, err := request(method, server.URL+tt.path, nil)
 			if err != nil {
 				t.Error(err)
 			}
-			if statusCode != http.StatusOK {
-				t.Errorf("handler returned wrong status code: got %v want %v",
-					statusCode, http.StatusOK)
+			if statusCode != 200 {
+				t.Errorf(testErrorFormat, statusCode, 200)
 			}
-			if method != http.MethodHead && body != test.body {
-				t.Errorf("handler returned unexpected body: got '%v' want '%v'",
-					body, test.body)
+			if method != "HEAD" && body != tt.body {
+				t.Errorf(testErrorFormat, body, tt.body)
+			}
+		})
+	}
+}
+
+func TestRouter_Use(t *testing.T) {
+	deferFn := func() {
+		if err := recover(); err == nil {
+			t.Errorf(testErrorFormat, err, "none nil error")
+		}
+	}
+
+	childRouter := NewRouter()
+	childRouter.Use(func(c *Context) {})
+
+	tests := []struct {
+		params  []interface{}
+		deferFn func()
+	}{
+		{[]interface{}{}, deferFn},
+		{[]interface{}{1}, deferFn},
+		{[]interface{}{1, 1}, deferFn},
+		{[]interface{}{1, func() {}}, deferFn},
+		{[]interface{}{1, func(c *Context) {}}, deferFn},
+		{[]interface{}{"/foo", func() {}}, deferFn},
+		{[]interface{}{"/foo", func(c *Context) {}}, nil},
+		{[]interface{}{func(c *Context) {}}, nil},
+		{[]interface{}{func(v interface{}, c *Context) {}}, nil},
+		{[]interface{}{"/foo", func(v interface{}, c *Context) {}}, nil},
+		{[]interface{}{childRouter}, nil},
+		{[]interface{}{"/foo", childRouter}, nil},
+	}
+
+	for _, tt := range tests {
+		t.Run("", func(t *testing.T) {
+			router := NewRouter()
+			if tt.deferFn != nil {
+				defer tt.deferFn()
+			}
+
+			router.Use(tt.params...)
+			if got := len(router.routes); got == 0 {
+				t.Errorf(testErrorFormat, got, ">0")
 			}
 		})
 	}

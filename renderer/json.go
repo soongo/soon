@@ -23,8 +23,5 @@ func (j JSON) RenderHeader(w http.ResponseWriter) {
 
 // Renderer writes data with custom ContentType.
 func (j JSON) Render(w http.ResponseWriter) error {
-	if err := json.NewEncoder(w).Encode(j.Data); err != nil {
-		panic(err)
-	}
-	return nil
+	return json.NewEncoder(w).Encode(j.Data)
 }

@@ -13,28 +13,87 @@ import (
 	"github.com/soongo/negotiator"
 )
 
+func TestParams_Get(t *testing.T) {
+	tests := []struct {
+		p        Params
+		k        interface{}
+		expected string
+	}{
+		{Params{"name": "foo", 0: "bar"}, "name", "foo"},
+		{Params{"name": "foo", 0: "bar"}, 0, "bar"},
+		{Params{"name": "foo", 0: "bar"}, 1, ""},
+	}
+
+	for _, tt := range tests {
+		if got := tt.p.Get(tt.k); got != tt.expected {
+			t.Errorf(testErrorFormat, got, tt.expected)
+		}
+	}
+}
+
+func TestParams_Set(t *testing.T) {
+	tests := []struct {
+		p        Params
+		k        interface{}
+		v        string
+		expected string
+	}{
+		{Params{}, "name", "foo", "foo"},
+		{Params{0: "bar"}, "name", "foo", "foo"},
+		{Params{"name": "foo", 0: "bar"}, 0, "foo", "foo"},
+	}
+
+	for _, tt := range tests {
+		tt.p.Set(tt.k, tt.v)
+		if got := tt.p.Get(tt.k); got != tt.expected {
+			t.Errorf(testErrorFormat, got, tt.expected)
+		}
+	}
+}
+
+func TestParams_MarshalJSON(t *testing.T) {
+	tests := []struct {
+		p        Params
+		expected string
+	}{
+		{Params{}, "{}"},
+		{Params{"name": "foo", 0: "bar"}, `{"0":"bar","name":"foo"}`},
+	}
+
+	for _, tt := range tests {
+		bts, err := tt.p.MarshalJSON()
+		if err != nil {
+			t.Error(err)
+		} else if got := string(bts); got != tt.expected {
+			t.Errorf(testErrorFormat, got, tt.expected)
+		}
+	}
+}
+
 func TestRequest_Accepts(t *testing.T) {
 	tests := []struct {
-		accept   string
+		accept   []string
 		types    []string
 		expected []string
 	}{
-		{"text/html", []string{"html"}, []string{"html"}},
-		{"text/*, application/json", []string{"html"}, []string{"html"}},
-		{"text/*, application/json", []string{"text/html"}, []string{"text/html"}},
-		{"text/*, application/json", []string{"json", "text"}, []string{"json"}},
-		{"text/*, application/json", []string{"application/json"}, []string{"application/json"}},
-		{"text/*, application/json", []string{"image/png"}, nil},
-		{"text/*, application/json", []string{"png"}, nil},
-		{"text/*;q=.5, application/json", []string{"html", "json"}, []string{"json"}},
-		{"text/*, application/json", nil, []string{"text/*", "application/json"}},
-		{"text/*, application/json", []string{}, []string{"text/*", "application/json"}},
-		{"text/*;q=.5, application/json", nil, []string{"application/json", "text/*"}},
+		{[]string{"text/html"}, []string{"html"}, []string{"html"}},
+		{nil, []string{"html", "image/png"}, []string{"html"}},
+		{[]string{}, []string{"html", "image/png"}, []string{"html"}},
+		{[]string{"text/*", "image/png"}, []string{"html"}, []string{"html"}},
+		{[]string{"text/*", "image/png"}, []string{"text/html"}, []string{"text/html"}},
+		{[]string{"text/*", "image/png"}, []string{"png", "text"}, []string{"png"}},
+		{[]string{"text/*", "image/png"}, []string{"image/png"}, []string{"image/png"}},
+		{[]string{"text/*", "image/png"}, []string{"image/jpg"}, nil},
+		{[]string{"text/*", "image/png"}, []string{"jpg"}, nil},
+		{[]string{"text/*;q=.5", "image/png"}, []string{"html", "png"}, []string{"png"}},
+		{[]string{"text/*", "image/png"}, nil, []string{"text/*", "image/png"}},
+		{[]string{"text/*", "image/png"}, []string{}, []string{"text/*", "image/png"}},
+		{[]string{"text/*;q=.5", "image/png"}, nil, []string{"image/png", "text/*"}},
 	}
 
 	req := NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	for _, tt := range tests {
-		req.Header = http.Header{negotiator.HeaderAccept: dotRegexp.Split(tt.accept, -1)}
+		req.Header = http.Header{negotiator.HeaderAccept: tt.accept}
 		if got := req.Accepts(tt.types...); !reflect.DeepEqual(got, tt.expected) {
 			t.Errorf(testErrorFormat, got, tt.expected)
 		}
@@ -121,6 +180,26 @@ func TestRequest_AcceptsLanguages(t *testing.T) {
 	for _, tt := range tests {
 		req.Header = http.Header{negotiator.HeaderAcceptLanguage: dotRegexp.Split(tt.accept, -1)}
 		if got := req.AcceptsLanguages(tt.languages...); !reflect.DeepEqual(got, tt.expected) {
+			t.Errorf(testErrorFormat, got, tt.expected)
+		}
+	}
+}
+
+func TestRequest_ResetParams(t *testing.T) {
+	tests := []struct {
+		p        Params
+		expected Params
+	}{
+		{nil, Params{}},
+		{Params{}, Params{}},
+		{Params{"name": "foo"}, Params{}},
+	}
+
+	for _, tt := range tests {
+		req := NewRequest(httptest.NewRequest("GET", "/", nil))
+		req.Params = tt.p
+		req.resetParams()
+		if got := req.Params; !reflect.DeepEqual(got, tt.expected) {
 			t.Errorf(testErrorFormat, got, tt.expected)
 		}
 	}

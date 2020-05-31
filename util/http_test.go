@@ -11,86 +11,113 @@ import (
 	"testing"
 )
 
+func TestAddHeader(t *testing.T) {
+	tests := []struct {
+		k        string
+		v        interface{}
+		expected []string
+	}{
+		{"Content-Type", "text/html", []string{"text/html; charset=UTF-8"}},
+		{"Content-Type", "text/html; charset=UTF-7", []string{"text/html; charset=UTF-7"}},
+		{"Content-Type", "application/octet-stream", []string{"application/octet-stream"}},
+		{
+			"Content-Type",
+			[]string{
+				"text/html",
+				"application/octet-stream",
+				"application/json",
+				"text/*; charset=UTF-7",
+			},
+			[]string{
+				"text/html; charset=UTF-8",
+				"application/octet-stream",
+				"application/json; charset=UTF-8",
+				"text/*; charset=UTF-7",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		w := httptest.NewRecorder()
+		AddHeader(w, tt.k, tt.v)
+		if got := w.Header()[tt.k]; !reflect.DeepEqual(got, tt.expected) {
+			t.Errorf(testErrorFormat, got, tt.expected)
+		}
+	}
+}
+
 func TestSetHeader(t *testing.T) {
-	k, expected := "Content-Type", "application/json; charset=UTF-8"
+	k := "Content-Type"
+	tests := []struct {
+		k        string
+		v        interface{}
+		expected interface{}
+	}{
+		{k, "text/html", http.Header{k: []string{"text/html; charset=UTF-8"}}},
+		{k, "text/html; charset=UTF-7", http.Header{k: []string{"text/html; charset=UTF-7"}}},
+		{k, "application/octet-stream", http.Header{k: []string{"application/octet-stream"}}},
+		{
+			k,
+			[]string{
+				"text/html",
+				"application/octet-stream",
+				"application/json",
+				"text/*; charset=UTF-7",
+			},
+			http.Header{k: []string{
+				"text/html; charset=UTF-8",
+				"application/octet-stream",
+				"application/json; charset=UTF-8",
+				"text/*; charset=UTF-7",
+			}},
+		},
+		{
+			"",
+			map[string]string{
+				k:          "text/html",
+				"X-Custom": "custom",
+			},
+			http.Header{
+				k:          []string{"text/html; charset=UTF-8"},
+				"X-Custom": []string{"custom"},
+			},
+		},
+	}
 
-	t.Run("normal", func(t *testing.T) {
-		res := httptest.NewRecorder()
-		SetHeader(res, k, expected)
-		result := res.Header().Get(k)
-		if result != expected {
-			t.Errorf(testErrorFormat, result, expected)
+	for _, tt := range tests {
+		w := httptest.NewRecorder()
+		w.Header().Set(k, "text/*")
+		if tt.k == "" {
+			SetHeader(w, tt.v)
+		} else {
+			SetHeader(w, tt.k, tt.v)
 		}
-	})
-
-	t.Run("replace", func(t *testing.T) {
-		res := httptest.NewRecorder()
-		res.Header().Set(k, "text/plain")
-		SetHeader(res, k, expected)
-		result := res.Header().Get(k)
-		if result != expected {
-			t.Errorf(testErrorFormat, result, expected)
+		if got := w.Header(); !reflect.DeepEqual(got, tt.expected) {
+			t.Errorf(testErrorFormat, got, tt.expected)
 		}
-	})
-
-	t.Run("map", func(t *testing.T) {
-		m := map[string]string{
-			"Content-Type": "application/json; charset=UTF-8",
-			"X-Custom":     "custom",
-		}
-		res := httptest.NewRecorder()
-		SetHeader(res, m)
-		result, expected := res.Header(), mapToHeader(m)
-		if !reflect.DeepEqual(result, expected) {
-			t.Errorf(testErrorFormat, result, expected)
-		}
-	})
+	}
 }
 
 func TestSetContentType(t *testing.T) {
-	k := "Content-Type"
-	t.Run("normal", func(t *testing.T) {
-		expected := "text/html; charset=UTF-8"
-		res := httptest.NewRecorder()
-		SetContentType(res, "html")
-		result := res.Header().Get(k)
-		if result != expected {
-			t.Errorf(testErrorFormat, result, expected)
-		}
+	tests := []struct {
+		name                string
+		contentType         string
+		expectedContentType string
+	}{
+		{"normal-0", "html", "text/html; charset=UTF-8"},
+		{"normal-1", "index.html", "text/html; charset=UTF-8"},
+		{"slash-0", "image/png", "image/png"},
+		{"slash-1", "/", "/"},
+		{"empty", "", "application/octet-stream"},
+	}
 
-		SetContentType(res, "index.html")
-		result = res.Header().Get(k)
-		if result != expected {
-			t.Errorf(testErrorFormat, result, expected)
+	for _, tt := range tests {
+		w := httptest.NewRecorder()
+		SetContentType(w, tt.contentType)
+		if got := w.Header().Get("Content-Type"); got != tt.expectedContentType {
+			t.Errorf(testErrorFormat, got, tt.expectedContentType)
 		}
-	})
-
-	t.Run("slash", func(t *testing.T) {
-		expected := "image/png"
-		res := httptest.NewRecorder()
-		SetContentType(res, expected)
-		result := res.Header().Get(k)
-		if result != expected {
-			t.Errorf(testErrorFormat, result, expected)
-		}
-
-		expected = "/"
-		SetContentType(res, expected)
-		result = res.Header().Get(k)
-		if result != expected {
-			t.Errorf(testErrorFormat, result, expected)
-		}
-	})
-
-	t.Run("empty", func(t *testing.T) {
-		expected := "application/octet-stream"
-		res := httptest.NewRecorder()
-		SetContentType(res, "")
-		result := res.Header().Get(k)
-		if result != expected {
-			t.Errorf(testErrorFormat, result, expected)
-		}
-	})
+	}
 }
 
 func TestVary(t *testing.T) {
@@ -129,6 +156,9 @@ func TestAppendToVaryHeader(t *testing.T) {
 		{"foo,bar", []string{"foo", "bar"}, "foo,bar"},
 		{"foo,bar", []string{"foo", "host"}, "foo,bar, host"},
 		{"foo,bar", []string{"你好", "bar"}, "foo,bar, 你好"},
+		{"foo", nil, "foo"},
+		{"*", []string{"foo"}, "*"},
+		{"foo", []string{"foo", "*"}, "*"},
 	}
 	for _, tt := range tests {
 		if got := AppendToVaryHeader(tt.vary, tt.fields); !reflect.DeepEqual(got, tt.expected) {
@@ -154,10 +184,38 @@ func TestParseHeader(t *testing.T) {
 	}
 }
 
-func mapToHeader(m map[string]string) http.Header {
-	h := map[string][]string{}
-	for k, v := range m {
-		h[k] = []string{v}
+func TestGetHeaderValues(t *testing.T) {
+	k := "Content-Type"
+	tests := []struct {
+		header   http.Header
+		expected []string
+	}{
+		{nil, nil},
+		{http.Header{k: []string{"text/*", "image/png"}}, []string{"text/*", "image/png"}},
 	}
-	return h
+
+	for _, tt := range tests {
+		if got := GetHeaderValues(tt.header, k); !reflect.DeepEqual(got, tt.expected) {
+			t.Errorf(testErrorFormat, got, tt.expected)
+		}
+	}
+}
+
+func TestNormalizeType(t *testing.T) {
+	tests := []struct {
+		t        string
+		expected AcceptParams
+	}{
+		{"html", AcceptParams{"text/html", 0, nil}},
+		{"text/html", AcceptParams{"text/html", 1, nil}},
+		{"text/html;q=0.8", AcceptParams{"text/html", .8, nil}},
+		{"text/html;p=0.8", AcceptParams{"text/html", 1, map[string]string{"p": "0.8"}}},
+		{"***", AcceptParams{"application/octet-stream", 0, nil}},
+	}
+
+	for _, tt := range tests {
+		if got := NormalizeType(tt.t); !reflect.DeepEqual(got, tt.expected) {
+			t.Errorf(testErrorFormat, got, tt.expected)
+		}
+	}
 }

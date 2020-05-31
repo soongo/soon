@@ -36,6 +36,9 @@ const (
 // 		soon.DefaultWriter = colorable.NewColorableStdout()
 var DefaultWriter io.Writer = os.Stdout
 
+// DefaultErrorWriter is the default io.Writer used by Soon to debug errors
+var DefaultErrorWriter io.Writer = os.Stderr
+
 var mode = ReleaseMode
 var modeCode = releaseCode
 
