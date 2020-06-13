@@ -14,8 +14,8 @@ func TestSetMode(t *testing.T) {
 		deferFn func()
 	}{
 		{ReleaseMode, nil},
-		{TestMode, nil},
 		{DebugMode, nil},
+		{TestMode, nil},
 		{
 			"Unknown",
 			func() {

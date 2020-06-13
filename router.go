@@ -93,7 +93,7 @@ func defaultErrorHandler(v interface{}, c *Context) {
 	case string:
 		text = err
 	}
-	http.Error(c.Response, text, status)
+	http.Error(c.Writer, text, status)
 }
 
 // NewRouter returns a new initialized Router with default configuration.

@@ -21,7 +21,8 @@ import (
 // validate the JSON of a request and render a JSON response for example.
 type Context struct {
 	Request  *Request
-	Response http.ResponseWriter
+	response *response
+	Writer   ResponseWriter
 
 	next Next
 
@@ -40,8 +41,9 @@ type Context struct {
 	finished bool
 }
 
-func NewContext(req *http.Request, res http.ResponseWriter) *Context {
-	c := &Context{Request: NewRequest(req), Response: res}
+func NewContext(r *http.Request, w http.ResponseWriter) *Context {
+	c := &Context{Request: NewRequest(r), response: NewResponse(w)}
+	c.Writer = c.response
 	c.init()
 	return c
 }
@@ -83,14 +85,14 @@ func (c *Context) Query() url.Values {
 // Note: calling c.Set() after c.Append() will reset the previously-set
 // header value.
 func (c *Context) Append(key string, value interface{}) {
-	util.AddHeader(c.Response, key, value)
+	util.AddHeader(c.Writer, key, value)
 }
 
 // Get gets the first value of response header associated with the given key.
 // If there are no values associated with the key, Get returns "".
 // It is case insensitive
 func (c *Context) Get(field string) string {
-	return c.Response.Header().Get(field)
+	return c.Writer.Header().Get(field)
 }
 
 // Set sets the response header entries associated with key to the
@@ -99,12 +101,12 @@ func (c *Context) Get(field string) string {
 //
 // To set multiple fields at once, pass a string map as the parameter.
 func (c *Context) Set(value ...interface{}) {
-	util.SetHeader(c.Response, value...)
+	util.SetHeader(c.Writer, value...)
 }
 
 // Status sets the HTTP status for the response.
 func (c *Context) Status(code int) {
-	c.Response.WriteHeader(code)
+	c.Writer.WriteHeader(code)
 }
 
 // SendStatus sets the response HTTP status code to statusCode and
@@ -118,7 +120,7 @@ func (c *Context) SendStatus(code int) {
 // by LookupMimeType() for the specified type. If type contains the
 // “/” character, then it sets the Content-Type to type.
 func (c *Context) Type(s string) {
-	util.SetContentType(c.Response, s)
+	util.SetContentType(c.Writer, s)
 }
 
 // Sets the HTTP response Content-Disposition header field to “attachment”.
@@ -136,7 +138,7 @@ func (c *Context) Attachment(filename ...string) {
 
 // Cookie sets cookie.
 func (c *Context) Cookie(cookie *http.Cookie) {
-	http.SetCookie(c.Response, cookie)
+	http.SetCookie(c.Writer, cookie)
 }
 
 // ClearCookie clears the specified cookie.
@@ -146,7 +148,7 @@ func (c *Context) ClearCookie(cookie *http.Cookie) {
 		p = "/"
 	}
 
-	http.SetCookie(c.Response, &http.Cookie{
+	http.SetCookie(c.Writer, &http.Cookie{
 		Name:    cookie.Name,
 		Value:   "",
 		Path:    p,
@@ -229,7 +231,7 @@ func (c *Context) Format(m map[string]Handle) {
 		acceptsKeys = c.Request.Accepts(keys...)
 	}
 
-	util.Vary(c.Response, []string{"Accept"})
+	util.Vary(c.Writer, []string{"Accept"})
 
 	if len(acceptsKeys) > 0 {
 		key := acceptsKeys[0]
@@ -263,19 +265,39 @@ func (c *Context) Json(v interface{}) {
 // sets the common http header.
 func (c *Context) renderHeader() {
 	c.HeadersSent = true
-	c.Response.Header().Set("Connection", "keep-alive")
-	c.Response.Header().Set("X-Powered-By", "Soon")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Powered-By", "Soon")
 }
 
 // Render uses the specified renderer to deal with http response body.
-func (c *Context) Render(renderer renderer.Renderer) {
+func (c *Context) Render(r renderer.Renderer) {
 	if !c.finished {
 		c.renderHeader()
-		renderer.RenderHeader(c.Response)
+		r.RenderHeader(c.Writer)
 
-		if err := renderer.Render(c.Response); err != nil {
-			c.Status(http.StatusInternalServerError)
+		if !bodyAllowedForStatus(c.Writer.Status()) {
+			c.Writer.WriteHeaderNow()
+			return
+		}
+
+		if err := r.Render(c.Writer); err != nil {
 			panic(err)
 		}
 	}
+}
+
+// bodyAllowedForStatus reports whether a given response status code
+// permits a body. See RFC 7230, section 3.3.
+//
+// bodyAllowedForStatus is a copy of http.bodyAllowedForStatus non-exported function.
+func bodyAllowedForStatus(status int) bool {
+	switch {
+	case status >= 100 && status <= 199:
+		return false
+	case status == 204:
+		return false
+	case status == 304:
+		return false
+	}
+	return true
 }

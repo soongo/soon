@@ -51,7 +51,7 @@ func makeHandle(t test) Handle {
 			c.Set(k, v)
 		}
 		if t.statusCode != 0 {
-			c.Response.WriteHeader(t.statusCode)
+			c.Status(t.statusCode)
 		}
 		if t.body != "" {
 			c.Send(t.body)
@@ -97,7 +97,7 @@ func TestRouterWithDefaultOptions(t *testing.T) {
 			route:      "/health-check/",
 			path:       "/health-check/",
 			statusCode: 200,
-			header:     header{"Content-Type": "application/json; charset=UTF-8"},
+			header:     header{"User-Agent": "go-http-client"},
 			body:       body200,
 		},
 		{route: "/health-check/", path: "/health-check", statusCode: 404, body: body404},
@@ -155,7 +155,7 @@ func TestRouterWithDefaultOptions(t *testing.T) {
 			route:      "/health-check/",
 			path:       "/health-check/",
 			statusCode: 200,
-			header:     header{"Content-Type": "application/json; charset=UTF-8"},
+			header:     header{"User-Agent": "go-http-client"},
 			body:       body200,
 		},
 		{route: "/health-check/", path: "/health-check", statusCode: 200, body: body200},
@@ -211,7 +211,7 @@ func TestRouterMiddleware(t *testing.T) {
 			path:       "/404",
 			statusCode: 404,
 			middleware: func(c *Context) {
-				http.Error(c.Response, body200, 404)
+				http.Error(c.Writer, body200, 404)
 			},
 		},
 		{

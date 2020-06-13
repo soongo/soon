@@ -27,6 +27,9 @@ var (
 	testErrorFormat = "got `%v`, expect `%v`"
 	timeFormat      = http.TimeFormat
 	dotRegexp       = regexp.MustCompile("\\s*,\\s*")
+	plainType       = "text/plain; charset=UTF-8"
+	htmlType        = "text/html; charset=UTF-8"
+	jsonType        = "application/json; charset=UTF-8"
 )
 
 func TestContext_HeadersSent(t *testing.T) {
@@ -135,7 +138,7 @@ func TestContext_Append(t *testing.T) {
 		v        interface{}
 		expected interface{}
 	}{
-		{"Content-Type", "text/html", []string{"text/html; charset=UTF-8"}},
+		{"Content-Type", "text/html", []string{htmlType}},
 		{"Content-Type", "text/html; charset=UTF-7", []string{"text/html; charset=UTF-7"}},
 		{"Content-Type", "application/octet-stream", []string{"application/octet-stream"}},
 		{
@@ -147,9 +150,9 @@ func TestContext_Append(t *testing.T) {
 				"text/*; charset=UTF-7",
 			},
 			[]string{
-				"text/html; charset=UTF-8",
+				htmlType,
 				"application/octet-stream",
-				"application/json; charset=UTF-8",
+				jsonType,
 				"text/*; charset=UTF-7",
 			},
 		},
@@ -158,7 +161,7 @@ func TestContext_Append(t *testing.T) {
 	for _, tt := range tests {
 		c := NewContext(nil, httptest.NewRecorder())
 		c.Append(tt.k, tt.v)
-		if got := c.Response.Header()[tt.k]; !reflect.DeepEqual(got, tt.expected) {
+		if got := c.Writer.Header()[tt.k]; !reflect.DeepEqual(got, tt.expected) {
 			t.Errorf(testErrorFormat, got, tt.v)
 		}
 	}
@@ -171,7 +174,7 @@ func TestContext_Set(t *testing.T) {
 		v        interface{}
 		expected interface{}
 	}{
-		{k, "text/html", http.Header{k: []string{"text/html; charset=UTF-8"}}},
+		{k, "text/html", http.Header{k: []string{htmlType}}},
 		{k, "text/html; charset=UTF-7", http.Header{k: []string{"text/html; charset=UTF-7"}}},
 		{k, "application/octet-stream", http.Header{k: []string{"application/octet-stream"}}},
 		{
@@ -183,9 +186,9 @@ func TestContext_Set(t *testing.T) {
 				"text/*; charset=UTF-7",
 			},
 			http.Header{k: []string{
-				"text/html; charset=UTF-8",
+				htmlType,
 				"application/octet-stream",
-				"application/json; charset=UTF-8",
+				jsonType,
 				"text/*; charset=UTF-7",
 			}},
 		},
@@ -196,7 +199,7 @@ func TestContext_Set(t *testing.T) {
 				"X-Custom": "custom",
 			},
 			http.Header{
-				k:          []string{"text/html; charset=UTF-8"},
+				k:          []string{htmlType},
 				"X-Custom": []string{"custom"},
 			},
 		},
@@ -204,13 +207,13 @@ func TestContext_Set(t *testing.T) {
 
 	for _, tt := range tests {
 		c := NewContext(nil, httptest.NewRecorder())
-		c.Response.Header().Set(k, "text/*")
+		c.Writer.Header().Set(k, "text/*")
 		if tt.k == "" {
 			c.Set(tt.v)
 		} else {
 			c.Set(tt.k, tt.v)
 		}
-		if got := c.Response.Header(); !reflect.DeepEqual(got, tt.expected) {
+		if got := c.Writer.Header(); !reflect.DeepEqual(got, tt.expected) {
 			t.Errorf(testErrorFormat, got, tt.expected)
 		}
 	}
@@ -222,7 +225,7 @@ func TestContext_Get(t *testing.T) {
 		v        interface{}
 		expected string
 	}{
-		{"Content-Type", "application/json", "application/json; charset=UTF-8"},
+		{"Content-Type", "application/json", jsonType},
 		{"Content-Type", "text/*", "text/*; charset=UTF-8"},
 		{"Content-Type", "application/octet-stream", "application/octet-stream"},
 		{"Content-Type", []string{"text/*", "application/json"}, "text/*; charset=UTF-8"},
@@ -253,7 +256,13 @@ func TestContext_Status(t *testing.T) {
 	for _, tt := range tests {
 		c := NewContext(nil, httptest.NewRecorder())
 		c.Status(tt.code)
-		w := c.Response.(*httptest.ResponseRecorder)
+
+		if got := c.Writer.Status(); got != tt.code {
+			t.Errorf(testErrorFormat, got, tt.code)
+		}
+
+		c.Writer.Flush()
+		w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
 		if got := w.Code; got != tt.code {
 			t.Errorf(testErrorFormat, got, tt.code)
 		}
@@ -273,7 +282,7 @@ func TestContext_SendStatus(t *testing.T) {
 	for _, tt := range tests {
 		c := NewContext(nil, httptest.NewRecorder())
 		c.SendStatus(tt.code)
-		w := c.Response.(*httptest.ResponseRecorder)
+		w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
 		if got := w.Code; got != tt.code {
 			t.Errorf(testErrorFormat, got, tt.code)
 		}
@@ -288,8 +297,8 @@ func TestContext_Type(t *testing.T) {
 		t        string
 		expected string
 	}{
-		{"html", "text/html; charset=UTF-8"},
-		{"index.html", "text/html; charset=UTF-8"},
+		{"html", htmlType},
+		{"index.html", htmlType},
 		{"image/png", "image/png"},
 		{"/", "/"},
 		{"", "application/octet-stream"},
@@ -389,7 +398,7 @@ func TestContext_ClearCookie(t *testing.T) {
 			t.Errorf(testErrorFormat, got, tt.expected[0])
 		}
 		c.ClearCookie(tt.cookie)
-		if got := c.Response.Header()["Set-Cookie"]; !reflect.DeepEqual(got, tt.expected) {
+		if got := c.Writer.Header()["Set-Cookie"]; !reflect.DeepEqual(got, tt.expected) {
 			t.Errorf(testErrorFormat, got, tt.expected)
 		}
 	}
@@ -451,7 +460,7 @@ func TestContext_SendFile(t *testing.T) {
 			nil,
 			nil,
 		},
-		{"empty-filepath", "", nil, 500, "", nil, deferFn},
+		{"empty-filepath", "", nil, 200, "", nil, deferFn},
 		{
 			"with-root-path",
 			"README.md",
@@ -461,13 +470,13 @@ func TestContext_SendFile(t *testing.T) {
 			nil,
 			nil,
 		},
-		{"not-root-filepath", "README.md", nil, 500, "", nil, deferFn},
-		{"directory", pwd, nil, 500, "", renderer.ErrIsDir, deferFn},
+		{"not-root-filepath", "README.md", nil, 200, "", nil, deferFn},
+		{"directory", pwd, nil, 200, "", renderer.ErrIsDir, deferFn},
 		{
 			"hidden-default",
 			path.Join(pwd, ".travis.yml"),
 			nil,
-			500,
+			200,
 			"",
 			renderer.ErrNotFound,
 			deferFn,
@@ -485,7 +494,7 @@ func TestContext_SendFile(t *testing.T) {
 			"hidden-deny",
 			path.Join(pwd, ".travis.yml"),
 			&renderer.FileOptions{DotfilesPolicy: renderer.DotfilesPolicyDeny},
-			500,
+			200,
 			"",
 			renderer.ErrForbidden,
 			deferFn,
@@ -495,7 +504,7 @@ func TestContext_SendFile(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := NewContext(nil, httptest.NewRecorder())
-			w := c.Response.(*httptest.ResponseRecorder)
+			w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
 			if tt.deferFn != nil {
 				func() {
 					defer tt.deferFn(w, tt.expectedStatus, tt.expectedError)
@@ -561,9 +570,9 @@ func TestContext_Download(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		c := &Context{Response: httptest.NewRecorder()}
+		c := NewContext(nil, httptest.NewRecorder())
 		c.Download(tt.filePath, tt.options)
-		w := c.Response.(*httptest.ResponseRecorder)
+		w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
 		if got := w.Code; got != tt.expectedStatus {
 			t.Errorf(testErrorFormat, got, tt.expectedStatus)
 		}
@@ -609,9 +618,9 @@ func TestContext_End(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := &Context{Response: httptest.NewRecorder()}
+			c := NewContext(nil, httptest.NewRecorder())
 			tt.handle(c)
-			w := c.Response.(*httptest.ResponseRecorder)
+			w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
 			if got := w.Body.String(); got != tt.expected {
 				t.Errorf(testErrorFormat, got, tt.expected)
 			}
@@ -723,13 +732,13 @@ func TestContext_String(t *testing.T) {
 		expectedStatus      int
 		expectedContentType string
 	}{
-		{"foo", 200, "text/plain; charset=utf-8"},
+		{"foo", 200, plainType},
 	}
 
 	for _, tt := range tests {
-		c := &Context{Response: httptest.NewRecorder()}
+		c := NewContext(nil, httptest.NewRecorder())
 		c.String(tt.s)
-		w := c.Response.(*httptest.ResponseRecorder)
+		w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
 		if got := w.Code; got != tt.expectedStatus {
 			t.Errorf(testErrorFormat, got, tt.expectedStatus)
 		}
@@ -743,7 +752,7 @@ func TestContext_String(t *testing.T) {
 }
 
 func TestContext_Json(t *testing.T) {
-	contentType := "application/json; charset=utf-8"
+	contentType := jsonType
 	tests := []struct {
 		handle              Handle
 		expectedStatus      int
@@ -797,9 +806,9 @@ func TestContext_Json(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		c := &Context{Response: httptest.NewRecorder()}
+		c := NewContext(nil, httptest.NewRecorder())
 		tt.handle(c)
-		w := c.Response.(*httptest.ResponseRecorder)
+		w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
 		if got := w.Code; got != tt.expectedStatus {
 			t.Errorf(testErrorFormat, got, tt.expectedStatus)
 		}
@@ -816,6 +825,8 @@ func TestContext_Json(t *testing.T) {
 }
 
 func TestContext_Render(t *testing.T) {
+	str := "foo"
+	strRenderer := renderer.String{Data: str}
 	tests := []struct {
 		name                string
 		renderer            renderer.Renderer
@@ -824,14 +835,10 @@ func TestContext_Render(t *testing.T) {
 		expectedBody        string
 		deferFn             func(w *httptest.ResponseRecorder, code int, contentType string)
 	}{
-		{
-			"string",
-			renderer.String{Data: "foo"},
-			200,
-			"text/plain; charset=utf-8",
-			"foo",
-			nil,
-		},
+		{"string", strRenderer, 200, plainType, str, nil},
+		{"string", strRenderer, 100, plainType, "", nil},
+		{"string", strRenderer, 204, plainType, "", nil},
+		{"string", strRenderer, 304, plainType, "", nil},
 		{
 			"json",
 			renderer.JSON{Data: struct {
@@ -839,7 +846,7 @@ func TestContext_Render(t *testing.T) {
 				PageTotal uint16
 			}{"foo", 50}},
 			200,
-			"application/json; charset=utf-8",
+			jsonType,
 			`{"Name":"foo","PageTotal":50}`,
 			nil,
 		},
@@ -850,15 +857,15 @@ func TestContext_Render(t *testing.T) {
 				PageTotal uint16 `json:"pageTotal"`
 			}{"foo", 50}},
 			200,
-			"application/json; charset=utf-8",
+			jsonType,
 			`{"name":"foo","pageTotal":50}`,
 			nil,
 		},
 		{
 			"json-error",
 			renderer.JSON{Data: func() {}},
-			500,
-			"application/json; charset=utf-8",
+			200,
+			jsonType,
 			"",
 			func(w *httptest.ResponseRecorder, code int, contentType string) {
 				if got := recover(); got == nil {
@@ -876,8 +883,11 @@ func TestContext_Render(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := &Context{Response: httptest.NewRecorder()}
-			w := c.Response.(*httptest.ResponseRecorder)
+			c := NewContext(nil, httptest.NewRecorder())
+			if tt.expectedStatus != 200 {
+				c.Status(tt.expectedStatus)
+			}
+			w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
 			if tt.deferFn != nil {
 				defer tt.deferFn(w, tt.expectedStatus, tt.expectedContentType)
 				c.Render(tt.renderer)
