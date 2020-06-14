@@ -9,13 +9,15 @@ import "net/http"
 // Renderer interface is to be implemented by JSON, XML, HTML, YAML and so on.
 type Renderer interface {
 	// RenderHeader writes custom headers.
-	RenderHeader(w http.ResponseWriter)
+	RenderHeader(http.ResponseWriter, *http.Request)
 
 	// Renderer writes data with custom ContentType.
-	Render(http.ResponseWriter) error
+	Render(http.ResponseWriter, *http.Request) error
 }
 
 var (
 	_ Renderer = String{}
 	_ Renderer = JSON{}
+	_ Renderer = File{}
+	_ Renderer = JSONP{}
 )

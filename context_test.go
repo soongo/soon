@@ -30,6 +30,7 @@ var (
 	plainType       = "text/plain; charset=UTF-8"
 	htmlType        = "text/html; charset=UTF-8"
 	jsonType        = "application/json; charset=UTF-8"
+	jsonpType       = "text/javascript; charset=UTF-8"
 )
 
 func TestContext_HeadersSent(t *testing.T) {
@@ -752,7 +753,6 @@ func TestContext_String(t *testing.T) {
 }
 
 func TestContext_Json(t *testing.T) {
-	contentType := jsonType
 	tests := []struct {
 		handle              Handle
 		expectedStatus      int
@@ -768,7 +768,7 @@ func TestContext_Json(t *testing.T) {
 				c.Json(book)
 			},
 			200,
-			contentType,
+			jsonType,
 			`{"Name":"foo","PageTotal":50}`,
 		},
 		{
@@ -780,7 +780,7 @@ func TestContext_Json(t *testing.T) {
 				c.Json(book)
 			},
 			200,
-			contentType,
+			jsonType,
 			`{"name":"foo","pageTotal":50}`,
 		},
 		{
@@ -788,7 +788,7 @@ func TestContext_Json(t *testing.T) {
 				c.Json([]string{"foo", "bar"})
 			},
 			200,
-			contentType,
+			jsonType,
 			`["foo","bar"]`,
 		},
 		{
@@ -800,7 +800,7 @@ func TestContext_Json(t *testing.T) {
 				c.Json(books)
 			},
 			200,
-			contentType,
+			jsonType,
 			`[{"name":"foo","pageTotal":50},{"name":"bar","pageTotal":20}]`,
 		},
 	}
@@ -824,23 +824,105 @@ func TestContext_Json(t *testing.T) {
 	}
 }
 
+func TestContext_Jsonp(t *testing.T) {
+	tests := []struct {
+		request             *http.Request
+		handle              Handle
+		expectedStatus      int
+		expectedContentType string
+		expectedBody        string
+	}{
+		{
+			nil,
+			func(c *Context) {
+				c.Jsonp(nil)
+			},
+			200,
+			jsonpType,
+			`/**/ typeof _jsonp_callback_ === 'function' && _jsonp_callback_(null);`,
+		},
+		{
+			nil,
+			func(c *Context) {
+				c.Jsonp(struct {
+					id   uint32
+					Name string
+				}{1, "x"})
+			},
+			200,
+			jsonpType,
+			`/**/ typeof _jsonp_callback_ === 'function' && _jsonp_callback_({"Name":"x"});`,
+		},
+		{
+			httptest.NewRequest("GET", "http://a.com?callback=jsonp12345", nil),
+			func(c *Context) {
+				c.Jsonp(struct {
+					ID   uint32 `json:"id"`
+					Name string `json:"name"`
+				}{1, "x"})
+			},
+			200,
+			jsonpType,
+			`/**/ typeof jsonp12345 === 'function' && jsonp12345({"id":1,"name":"x"});`,
+		},
+		{
+			httptest.NewRequest("GET", "http://a.com?callback=jsonp12345", nil),
+			func(c *Context) {
+				c.Jsonp([]string{"foo", "bar"})
+			},
+			200,
+			jsonpType,
+			`/**/ typeof jsonp12345 === 'function' && jsonp12345(["foo","bar"]);`,
+		},
+		{
+			httptest.NewRequest("GET", "http://a.com?callback=jsonp12345", nil),
+			func(c *Context) {
+				c.Jsonp([]struct {
+					ID   uint32 `json:"id"`
+					Name string `json:"name"`
+				}{{1, "x"}, {2, "y"}})
+			},
+			200,
+			jsonpType,
+			`/**/ typeof jsonp12345 === 'function' && jsonp12345([{"id":1,"name":"x"},{"id":2,"name":"y"}]);`,
+		},
+	}
+
+	for _, tt := range tests {
+		c := NewContext(tt.request, httptest.NewRecorder())
+		tt.handle(c)
+		w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
+		if got := w.Code; got != tt.expectedStatus {
+			t.Errorf(testErrorFormat, got, tt.expectedStatus)
+		}
+		if got := c.Get("Content-Type"); got != tt.expectedContentType {
+			t.Errorf(testErrorFormat, got, tt.expectedContentType)
+		}
+		if got := w.Body.String(); got != tt.expectedBody {
+			t.Errorf(testErrorFormat, got, tt.expectedBody)
+		}
+	}
+}
+
 func TestContext_Render(t *testing.T) {
 	str := "foo"
 	strRenderer := renderer.String{Data: str}
 	tests := []struct {
 		name                string
+		request             *http.Request
 		renderer            renderer.Renderer
 		expectedStatus      int
 		expectedContentType string
 		expectedBody        string
-		deferFn             func(w *httptest.ResponseRecorder, code int, contentType string)
+		deferFn             func(w *httptest.ResponseRecorder, code int, contentType, body string)
 	}{
-		{"string", strRenderer, 200, plainType, str, nil},
-		{"string", strRenderer, 100, plainType, "", nil},
-		{"string", strRenderer, 204, plainType, "", nil},
-		{"string", strRenderer, 304, plainType, "", nil},
+		{"string", nil, strRenderer, 200, plainType, str, nil},
+		{"string", nil, strRenderer, 100, plainType, "", nil},
+		{"string", nil, strRenderer, 204, plainType, "", nil},
+		{"string", nil, strRenderer, 304, plainType, "", nil},
 		{
 			"json",
+			nil,
 			renderer.JSON{Data: struct {
 				Name      string
 				PageTotal uint16
@@ -852,6 +934,7 @@ func TestContext_Render(t *testing.T) {
 		},
 		{
 			"json-custom",
+			nil,
 			renderer.JSON{Data: struct {
 				Name      string `json:"name"`
 				PageTotal uint16 `json:"pageTotal"`
@@ -863,11 +946,12 @@ func TestContext_Render(t *testing.T) {
 		},
 		{
 			"json-error",
+			nil,
 			renderer.JSON{Data: func() {}},
 			200,
 			jsonType,
 			"",
-			func(w *httptest.ResponseRecorder, code int, contentType string) {
+			func(w *httptest.ResponseRecorder, code int, contentType, body string) {
 				if got := recover(); got == nil {
 					t.Errorf(testErrorFormat, got, "none nil error")
 				}
@@ -877,19 +961,56 @@ func TestContext_Render(t *testing.T) {
 				if got := w.Header().Get("Content-Type"); got != contentType {
 					t.Errorf(testErrorFormat, got, contentType)
 				}
+				if got := w.Body.String(); got != body {
+					t.Errorf(testErrorFormat, got, body)
+				}
+			},
+		},
+		{
+			"jsonp",
+			httptest.NewRequest("GET", "http://a.com?callback=jsonp12345", nil),
+			renderer.JSONP{Data: struct {
+				ID   uint32 `json:"id"`
+				Name string `json:"name"`
+			}{1, "x"}},
+			200,
+			jsonpType,
+			`/**/ typeof jsonp12345 === 'function' && jsonp12345({"id":1,"name":"x"});`,
+			nil,
+		},
+		{
+			"jsonp-error",
+			nil,
+			renderer.JSONP{Data: func() {}},
+			200,
+			jsonpType,
+			"",
+			func(w *httptest.ResponseRecorder, code int, contentType, body string) {
+				if got := recover(); got == nil {
+					t.Errorf(testErrorFormat, got, "none nil error")
+				}
+				if got := w.Code; got != code {
+					t.Errorf(testErrorFormat, got, code)
+				}
+				if got := w.Header().Get("Content-Type"); got != contentType {
+					t.Errorf(testErrorFormat, got, contentType)
+				}
+				if got := w.Body.String(); got != body {
+					t.Errorf(testErrorFormat, got, body)
+				}
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := NewContext(nil, httptest.NewRecorder())
+			c := NewContext(tt.request, httptest.NewRecorder())
 			if tt.expectedStatus != 200 {
 				c.Status(tt.expectedStatus)
 			}
 			w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
 			if tt.deferFn != nil {
-				defer tt.deferFn(w, tt.expectedStatus, tt.expectedContentType)
+				defer tt.deferFn(w, tt.expectedStatus, tt.expectedContentType, tt.expectedBody)
 				c.Render(tt.renderer)
 			} else {
 				c.Render(tt.renderer)

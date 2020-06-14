@@ -262,6 +262,12 @@ func (c *Context) Json(v interface{}) {
 	c.Render(renderer.JSON{Data: v})
 }
 
+// Jsonp sends a JSON response with JSONP support. This method is identical
+// to c.Json(), except that it opts-in to JSONP callback support.
+func (c *Context) Jsonp(v interface{}) {
+	c.Render(renderer.JSONP{Data: v})
+}
+
 // sets the common http header.
 func (c *Context) renderHeader() {
 	c.HeadersSent = true
@@ -273,14 +279,14 @@ func (c *Context) renderHeader() {
 func (c *Context) Render(r renderer.Renderer) {
 	if !c.finished {
 		c.renderHeader()
-		r.RenderHeader(c.Writer)
+		r.RenderHeader(c.Writer, c.Request.Request)
 
 		if !bodyAllowedForStatus(c.Writer.Status()) {
 			c.Writer.WriteHeaderNow()
 			return
 		}
 
-		if err := r.Render(c.Writer); err != nil {
+		if err := r.Render(c.Writer, c.Request.Request); err != nil {
 			panic(err)
 		}
 	}

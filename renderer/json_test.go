@@ -14,7 +14,7 @@ import (
 func TestJSON_RenderHeader(t *testing.T) {
 	w := httptest.NewRecorder()
 	renderer := JSON{nil}
-	renderer.RenderHeader(w)
+	renderer.RenderHeader(w, nil)
 	if got := w.Header().Get("Content-Type"); got != jsonContentType {
 		t.Errorf(testErrorFormat, got, jsonContentType)
 	}
@@ -50,7 +50,7 @@ func TestJSON_Render(t *testing.T) {
 	for _, tt := range tests {
 		w := httptest.NewRecorder()
 		renderer := JSON{tt.data}
-		err := renderer.Render(w)
+		err := renderer.Render(w, nil)
 		if tt.err != nil {
 			if err == nil {
 				t.Errorf(testErrorFormat, err, "none nil error")

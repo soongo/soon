@@ -18,7 +18,7 @@ var (
 func TestString_RenderHeader(t *testing.T) {
 	w := httptest.NewRecorder()
 	renderer := String{"hi"}
-	renderer.RenderHeader(w)
+	renderer.RenderHeader(w, nil)
 	if got := w.Header().Get("Content-Type"); got != plainContentType {
 		t.Errorf(testErrorFormat, got, plainContentType)
 	}
@@ -35,7 +35,7 @@ func TestString_Render(t *testing.T) {
 	for _, tt := range tests {
 		w := httptest.NewRecorder()
 		renderer := String{tt.s}
-		renderer.Render(w)
+		renderer.Render(w, nil)
 		if got := w.Body.String(); got != tt.s {
 			t.Errorf(testErrorFormat, got, tt.s)
 		}

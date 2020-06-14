@@ -62,12 +62,12 @@ type File struct {
 }
 
 // RenderHeader writes custom headers.
-func (f File) RenderHeader(w http.ResponseWriter) {
+func (f File) RenderHeader(_ http.ResponseWriter, _ *http.Request) {
 
 }
 
 // Renderer writes data with custom ContentType.
-func (f File) Render(w http.ResponseWriter) error {
+func (f File) Render(w http.ResponseWriter, _ *http.Request) error {
 	filePath := strings.Trim(f.FilePath, " ")
 	if filePath == "" {
 		return errors.New("path argument is required")

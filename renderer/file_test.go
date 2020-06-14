@@ -18,7 +18,7 @@ import (
 func TestFile_RenderHeader(t *testing.T) {
 	w := httptest.NewRecorder()
 	renderer := File{"", nil}
-	renderer.RenderHeader(w)
+	renderer.RenderHeader(w, nil)
 	if got := w.Header().Get("Content-Type"); got != "" {
 		t.Errorf(testErrorFormat, got, "")
 	}
@@ -111,7 +111,7 @@ func TestFile_Render(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			renderer := File{tt.filePath, tt.options}
 			w := httptest.NewRecorder()
-			err := renderer.Render(w)
+			err := renderer.Render(w, nil)
 			if tt.expectedError != nil {
 				if err == nil {
 					t.Errorf(testErrorFormat, err, "none nil error")
