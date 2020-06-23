@@ -267,7 +267,8 @@ func (c *Context) Format(m map[string]Handle) {
 		i++
 	}
 
-	// TODO: keys of map is not at determined order
+	// TODO: As keys of map is not at determined order, so the first callback
+	// TODO: is the first one after sorted, not the one first declared.
 	sort.Strings(keys)
 
 	var acceptsKeys []string
@@ -289,7 +290,7 @@ func (c *Context) Format(m map[string]Handle) {
 	}
 }
 
-// Sends string body
+// Send is alias for String method
 func (c *Context) Send(s string) {
 	c.String(s)
 }
