@@ -61,7 +61,7 @@ func FileExists(absPath string) bool {
 	return true
 }
 
-// Encodes a text string as a valid Uniform Resource Identifier (URI)
+// EncodeURI encodes a text string as a valid Uniform Resource Identifier (URI)
 func EncodeURI(str string) string {
 	excludes := ";/?:@&=+$,#"
 	arr := strings.Split(str, "")
@@ -84,6 +84,7 @@ func EncodeURIComponent(str string) string {
 	return r
 }
 
+// AddPrefixSlash adds a slash to the start of given string
 func AddPrefixSlash(p string) string {
 	if !strings.HasPrefix(p, "/") {
 		p = "/" + p
@@ -91,6 +92,7 @@ func AddPrefixSlash(p string) string {
 	return p
 }
 
+// RouteJoin joins all given routes
 func RouteJoin(routes ...string) string {
 	var route string
 	for _, r := range routes {

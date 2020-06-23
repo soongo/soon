@@ -25,7 +25,7 @@ type Context struct {
 	response *response
 	Writer   ResponseWriter
 
-	next Next
+	next func(v ...interface{})
 
 	// Locals contains response local variables scoped to the request,
 	// and therefore available during that request / response cycle (if any).
@@ -38,26 +38,28 @@ type Context struct {
 	finished bool
 }
 
+// NewContext returns an instance of Context object
 func NewContext(r *http.Request, w http.ResponseWriter) *Context {
-	c := &Context{Request: NewRequest(r), response: NewResponse(w)}
+	c := &Context{Request: NewRequest(r), response: newResponse(w)}
 	c.Writer = c.response
 	c.init()
 	return c
 }
-
-type Next func(v ...interface{})
 
 // Next calls the next handler
 func (c *Context) Next(v ...interface{}) {
 	c.next(v...)
 }
 
+// Locals contains response local variables scoped to the request.
 type Locals map[string]interface{}
 
+// Get returns the value of specified key in locals
 func (l Locals) Get(k string) interface{} {
 	return l[k]
 }
 
+// Set sets the value of specified key in locals
 func (l Locals) Set(k string, v interface{}) {
 	l[k] = v
 }
@@ -81,7 +83,7 @@ func (c *Context) HeadersSent() bool {
 	return c.Writer.HeaderWritten()
 }
 
-// Appends the specified value to the HTTP response header field.
+// Append the specified value to the HTTP response header field.
 // If the header is not already set, it creates the header with the
 // specified value. The value parameter can be a string or a string slice.
 // Note: calling c.Set() after c.Append() will reset the previously-set
@@ -90,14 +92,14 @@ func (c *Context) Append(key string, value interface{}) {
 	util.AddHeader(c.Writer, key, value)
 }
 
-// Gets the first value of response header associated with the given key.
+// Get the first value of response header associated with the given key.
 // If there are no values associated with the key, Get returns "".
 // It is case insensitive
 func (c *Context) Get(field string) string {
 	return c.Writer.Header().Get(field)
 }
 
-// Sets the response header entries associated with key to the
+// Set the response header entries associated with key to the
 // single element value. It replaces any existing values
 // associated with key. The key is case insensitive;
 //
@@ -124,7 +126,7 @@ func (c *Context) SendStatus(code int) {
 	c.Send(http.StatusText(code))
 }
 
-// Sets the Content-Type HTTP header to the MIME type as determined
+// Type sets the Content-Type HTTP header to the MIME type as determined
 // by LookupMimeType() for the specified type. If type contains the
 // “/” character, then it sets the Content-Type to type.
 func (c *Context) Type(s string) {
@@ -164,9 +166,10 @@ func (c *Context) Location(url string) {
 	c.Set("Location", util.EncodeURI(url))
 }
 
-// Sets the HTTP response Content-Disposition header field to “attachment”.
-// If a filename is given, then it sets the Content-Type based on the extension
-// name via c.Type(), and sets the Content-Disposition “filename=” parameter.
+// Attachment sets the HTTP response Content-Disposition header field to
+// “attachment”. If a filename is given, then it sets the Content-Type based
+// on the extension name via c.Type(), and sets the Content-Disposition
+// “filename=” parameter.
 func (c *Context) Attachment(filename ...string) {
 	contentDisposition := "attachment"
 	if len(filename) >= 1 {
@@ -197,15 +200,15 @@ func (c *Context) ClearCookie(cookie *http.Cookie) {
 	})
 }
 
-// Transfers the file at the given path. Sets the Content-Type response HTTP
-// header field based on the filename’s extension.
+// SendFile transfers the file at the given path. Sets the Content-Type
+// response HTTP header field based on the filename’s extension.
 // Unless the root option is set in the options object, path must be an
 // absolute path to the file.
 func (c *Context) SendFile(filePath string, options *renderer.FileOptions) {
 	c.Render(renderer.File{FilePath: filePath, Options: options})
 }
 
-// Transfers the file at path as an “attachment”. Typically, browsers will
+// Download transfers the file at path as an “attachment”. Typically, browsers will
 // prompt the user for download. By default, the Content-Disposition header
 // “filename=” parameter is path (this typically appears in the browser dialog).
 // Override this default with the options.Name parameter.
@@ -248,7 +251,7 @@ func (c *Context) End() {
 //
 // Content-Type is set for you, however you may alter this within the callback
 // using `c.Type()` or `c.Set("Content-Type", ...)`.
-
+//
 // By default Soon passes an `error` with a `.status` of 406 to `Next(err)`
 // if a match is not made. If you provide a `.default` callback it will be
 // invoked instead.

@@ -1145,6 +1145,7 @@ func LookupMimeType(s string) string {
 	return "application/octet-stream"
 }
 
+// LookupCharset lookups the charset of MIME Type.
 func LookupCharset(mimeType string) string {
 	if charsetUTF8Regexp.MatchString(mimeType) {
 		return "UTF-8"

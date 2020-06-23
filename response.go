@@ -50,7 +50,7 @@ type response struct {
 
 var _ ResponseWriter = &response{}
 
-func NewResponse(w http.ResponseWriter) *response {
+func newResponse(w http.ResponseWriter) *response {
 	r := &response{}
 	r.reset(w)
 	return r
@@ -63,8 +63,8 @@ func (r *response) reset(w http.ResponseWriter) {
 }
 
 // HeaderWritten returns true if the response header was already written.
-func (c *response) HeaderWritten() bool {
-	return c.headerWritten
+func (r *response) HeaderWritten() bool {
+	return r.headerWritten
 }
 
 // WriteHeader sends an HTTP response header with the provided status code.
@@ -122,6 +122,6 @@ func (r *response) Size() int {
 }
 
 // Written returns true if the response body was already written.
-func (w *response) Written() bool {
-	return w.size != noWritten
+func (r *response) Written() bool {
+	return r.size != noWritten
 }

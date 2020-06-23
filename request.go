@@ -27,6 +27,7 @@ func (p Params) Set(k interface{}, v string) {
 	p[k] = v
 }
 
+// MarshalJSON transforms the Params object to json
 func (p Params) MarshalJSON() ([]byte, error) {
 	m := make(map[string]string, len(p))
 	for k, v := range p {
@@ -43,6 +44,7 @@ type Request struct {
 	Params Params
 }
 
+// NewRequest returns an instance of Request object
 func NewRequest(req *http.Request) *Request {
 	return &Request{Request: req, Params: make(Params, 0)}
 }
@@ -51,7 +53,7 @@ func NewRequest(req *http.Request) *Request {
 // request’s Accept HTTP header field. The method returns the best match,
 // or if none of the specified content types is acceptable, returns nil (in
 // which case, the application should respond with 406 "Not Acceptable").
-
+//
 // The types value may be multiple MIME types string (such as “application/json”,
 // "text/html"), extension names (such as “json”, "text").
 // The method returns the best match (if any).

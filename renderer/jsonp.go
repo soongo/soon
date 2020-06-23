@@ -16,7 +16,7 @@ const (
 	jsonpContentType     = "text/javascript; charset=UTF-8"
 )
 
-// JSON contains the given interface object.
+// JSONP contains the given interface object.
 type JSONP struct {
 	Data interface{}
 }
@@ -27,7 +27,7 @@ func (j JSONP) RenderHeader(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", jsonpContentType)
 }
 
-// Renderer writes data with custom ContentType.
+// Render writes data with custom ContentType.
 func (j JSONP) Render(w http.ResponseWriter, req *http.Request) error {
 	bs, err := json.Marshal(j.Data)
 	if err != nil {

@@ -79,9 +79,9 @@ func SetHeader(w http.ResponseWriter, value ...interface{}) {
 	}
 }
 
-// Sets the Content-Type HTTP header to the MIME type as determined
-// by LookupMimeType() for the specified type. If type contains the
-// “/” character, then it sets the Content-Type to type.
+// SetContentType sets the Content-Type HTTP header to the MIME type as
+// determined by LookupMimeType() for the specified type. If type contains
+// the “/” character, then it sets the Content-Type to type.
 func SetContentType(w http.ResponseWriter, s string) {
 	k, s := "Content-Type", strings.Trim(s, " ")
 	if strings.Contains(s, "/") {

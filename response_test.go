@@ -21,7 +21,7 @@ func TestResponse_WriteHeader(t *testing.T) {
 		}
 
 		for _, tt := range tests {
-			r := NewResponse(httptest.NewRecorder())
+			r := newResponse(httptest.NewRecorder())
 			r.WriteHeader(tt.code)
 			if got := r.Status(); got != tt.expected {
 				t.Errorf(testErrorFormat, got, tt.expected)
@@ -32,7 +32,7 @@ func TestResponse_WriteHeader(t *testing.T) {
 	t.Run("write-after-send", func(t *testing.T) {
 		got := captureOutput(t, func() {
 			SetMode(DebugMode)
-			r := NewResponse(httptest.NewRecorder())
+			r := newResponse(httptest.NewRecorder())
 			r.WriteHeader(100)
 			_, _ = r.WriteString("hello")
 			r.WriteHeader(200)
@@ -58,7 +58,7 @@ func TestResponse_WriteHeaderNow(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		r := NewResponse(httptest.NewRecorder())
+		r := newResponse(httptest.NewRecorder())
 		r.WriteHeader(tt.code)
 		r.WriteHeaderNow()
 		r.WriteHeader(tt.again)
@@ -81,7 +81,7 @@ func TestResponse_Write(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		r := NewResponse(httptest.NewRecorder())
+		r := newResponse(httptest.NewRecorder())
 		r.WriteHeader(tt.code)
 		size, err := r.Write(tt.data)
 		if err != nil {
@@ -116,7 +116,7 @@ func TestResponse_WriteString(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		r := NewResponse(httptest.NewRecorder())
+		r := newResponse(httptest.NewRecorder())
 		recorder := r.ResponseWriter.(*httptest.ResponseRecorder)
 		r.WriteHeader(tt.code)
 		if got := recorder.Code; got != 200 {
@@ -152,7 +152,7 @@ func TestResponse_Flush(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		r := NewResponse(httptest.NewRecorder())
+		r := newResponse(httptest.NewRecorder())
 		recorder := r.ResponseWriter.(*httptest.ResponseRecorder)
 		r.WriteHeader(tt.code)
 		if got := r.Status(); got != tt.expectedCode {
@@ -184,7 +184,7 @@ func TestResponse_Status(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		r := NewResponse(httptest.NewRecorder())
+		r := newResponse(httptest.NewRecorder())
 		r.WriteHeader(tt.code)
 		if got := r.Status(); got != tt.expectedCode {
 			t.Errorf(testErrorFormat, got, tt.expectedCode)
@@ -202,7 +202,7 @@ func TestResponse_Size(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		r := NewResponse(httptest.NewRecorder())
+		r := newResponse(httptest.NewRecorder())
 		_, err := r.WriteString(tt.data)
 		if err != nil {
 			t.Error(err)
@@ -222,7 +222,7 @@ func TestResponse_Written(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		r := NewResponse(httptest.NewRecorder())
+		r := newResponse(httptest.NewRecorder())
 		r.WriteHeader(tt.code)
 		if got := r.Written(); got != false {
 			t.Errorf(testErrorFormat, got, false)

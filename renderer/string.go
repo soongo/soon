@@ -21,7 +21,7 @@ func (s String) RenderHeader(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", plainContentType)
 }
 
-// Renderer writes data with custom ContentType.
+// Render writes data with custom ContentType.
 func (s String) Render(w http.ResponseWriter, _ *http.Request) error {
 	_, err := io.WriteString(w, s.Data)
 	return err

@@ -17,20 +17,32 @@ import (
 	"github.com/soongo/soon/util"
 )
 
+// DotfilesPolicy is the policy for dot files
 type DotfilesPolicy uint8
 
 const (
+	// DotfilesPolicyIgnore ignore dot files
 	DotfilesPolicyIgnore DotfilesPolicy = iota
+
+	// DotfilesPolicyAllow allow dot files
 	DotfilesPolicyAllow
+
+	// DotfilesPolicyDeny deny dot files
 	DotfilesPolicyDeny
 )
 
 var (
-	ErrIsDir     = errors.New("file is directory")
+	// ErrIsDir means the file is directory
+	ErrIsDir = errors.New("file is directory")
+
+	// ErrForbidden represents forbidden error
 	ErrForbidden = errors.New(http.StatusText(http.StatusForbidden))
-	ErrNotFound  = errors.New(http.StatusText(http.StatusNotFound))
+
+	// ErrNotFound represents not found error
+	ErrNotFound = errors.New(http.StatusText(http.StatusNotFound))
 )
 
+// FileOptions contains all options for file renderer
 type FileOptions struct {
 	// Sets the max-age property of the Cache-Control header.
 	MaxAge *time.Duration
@@ -56,6 +68,7 @@ type FileOptions struct {
 	AcceptRangesDisabled bool
 }
 
+// File contains the given path and options for file renderer.
 type File struct {
 	FilePath string
 	Options  *FileOptions
@@ -66,7 +79,7 @@ func (f File) RenderHeader(_ http.ResponseWriter, _ *http.Request) {
 
 }
 
-// Renderer writes data with custom ContentType.
+// Render writes data with custom ContentType.
 func (f File) Render(w http.ResponseWriter, _ *http.Request) error {
 	filePath := strings.Trim(f.FilePath, " ")
 	if filePath == "" {
