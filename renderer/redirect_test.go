@@ -36,5 +36,8 @@ func TestRedirect_Render(t *testing.T) {
 		} else if err != nil {
 			t.Errorf(testErrorFormat, err, "nil")
 		}
+
+		// just for improving test coverage
+		r.RenderHeader(w, tt.req)
 	}
 }

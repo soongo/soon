@@ -507,7 +507,7 @@ func TestContext_SendFile(t *testing.T) {
 	deferFn := func(w *httptest.ResponseRecorder, code int, e error) {
 		err := recover()
 		if err == nil {
-			t.Errorf(testErrorFormat, nil, "none nil error")
+			t.Errorf(testErrorFormat, nil, "error")
 		}
 		if e != nil && err != e {
 			t.Errorf(testErrorFormat, err, e)
@@ -1127,7 +1127,7 @@ func TestContext_Render(t *testing.T) {
 			"",
 			func(w *httptest.ResponseRecorder, code int, contentType, body string) {
 				if got := recover(); got == nil {
-					t.Errorf(testErrorFormat, got, "none nil error")
+					t.Errorf(testErrorFormat, got, "error")
 				}
 				if got := w.Code; got != code {
 					t.Errorf(testErrorFormat, got, code)
@@ -1161,13 +1161,47 @@ func TestContext_Render(t *testing.T) {
 			"",
 			func(w *httptest.ResponseRecorder, code int, contentType, body string) {
 				if got := recover(); got == nil {
-					t.Errorf(testErrorFormat, got, "none nil error")
+					t.Errorf(testErrorFormat, got, "error")
 				}
 				if got := w.Code; got != code {
 					t.Errorf(testErrorFormat, got, code)
 				}
 				if got := w.Header().Get("Content-Type"); got != contentType {
 					t.Errorf(testErrorFormat, got, contentType)
+				}
+				if got := w.Body.String(); got != body {
+					t.Errorf(testErrorFormat, got, body)
+				}
+			},
+		},
+		{
+			"redirect",
+			httptest.NewRequest("GET", "http://example.com", nil),
+			renderer.Redirect{Code: 301, Location: "http://example.com"},
+			301,
+			"text/html; charset=utf-8",
+			"<a href=\"http://example.com\">Moved Permanently</a>.\n\n",
+			nil,
+		},
+		{
+			"redirect-error",
+			httptest.NewRequest("GET", "http://example.com", nil),
+			renderer.Redirect{Code: 200, Location: "http://example.com"},
+			200,
+			"",
+			"",
+			func(w *httptest.ResponseRecorder, code int, contentType, body string) {
+				if got := recover(); got == nil {
+					t.Errorf(testErrorFormat, got, "error")
+				}
+				if got := w.Code; got != code {
+					t.Errorf(testErrorFormat, got, code)
+				}
+				if got := w.Header().Get("Content-Type"); got != contentType {
+					t.Errorf(testErrorFormat, got, contentType)
+				}
+				if got := w.Header().Get("Location"); got != "" {
+					t.Errorf(testErrorFormat, got, "")
 				}
 				if got := w.Body.String(); got != body {
 					t.Errorf(testErrorFormat, got, body)
@@ -1202,6 +1236,11 @@ func TestContext_Render(t *testing.T) {
 				}
 				if got := w.Body.String(); got != expectedBody {
 					t.Errorf(testErrorFormat, got, expectedBody)
+				}
+				if rr, ok := tt.renderer.(renderer.Redirect); ok {
+					if got := w.Header().Get("Location"); got != rr.Location {
+						t.Errorf(testErrorFormat, got, rr.Location)
+					}
 				}
 			}
 		})
