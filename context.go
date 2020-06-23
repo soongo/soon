@@ -34,11 +34,7 @@ type Context struct {
 	// the request path name, authenticated user, user settings, and so on.
 	Locals Locals
 
-	// HeadersSent indicates if the app sent HTTP headers for the response.
-	HeadersSent bool
-
-	// The finished property will be true if response.end()
-	// has been called.
+	// The finished property will be true if `context.End()` has been called.
 	finished bool
 }
 
@@ -78,6 +74,11 @@ func (c *Context) Params() Params {
 // Query is a shortcut method for getting query of request
 func (c *Context) Query() url.Values {
 	return c.Request.URL.Query()
+}
+
+// HeadersSent indicates if the response header was already sent.
+func (c *Context) HeadersSent() bool {
+	return c.Writer.HeaderWritten()
 }
 
 // Appends the specified value to the HTTP response header field.
@@ -227,8 +228,8 @@ func (c *Context) Download(filePath string, options *renderer.FileOptions) {
 	c.SendFile(filePath, options)
 }
 
-// End marks the response is finished, and other send operations after end
-// will be ignored.
+// End signals to the server that all of the response headers and body have been
+// sent; other operations after it will be ignored.
 //
 // Use to quickly end the response without any data. If you need to respond
 // with data, instead use methods such as c.Send() and c.Json().
@@ -320,7 +321,6 @@ func (c *Context) Redirect(status int, location string) {
 
 // sets the common http header.
 func (c *Context) renderHeader() {
-	c.HeadersSent = true
 	c.Writer.Header().Set("Connection", "keep-alive")
 	c.Writer.Header().Set("X-Powered-By", "Soon")
 }

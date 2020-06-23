@@ -29,6 +29,9 @@ type ResponseWriter interface {
 	// Writes the string into the response body.
 	WriteString(string) (int, error)
 
+	// Returns true if the response header was already written.
+	HeaderWritten() bool
+
 	// Returns true if the response body was already written.
 	Written() bool
 
@@ -40,8 +43,9 @@ type ResponseWriter interface {
 type response struct {
 	http.ResponseWriter
 
-	status int
-	size   int
+	status        int
+	size          int
+	headerWritten bool
 }
 
 var _ ResponseWriter = &response{}
@@ -56,6 +60,11 @@ func (r *response) reset(w http.ResponseWriter) {
 	r.ResponseWriter = w
 	r.size = noWritten
 	r.status = defaultStatus
+}
+
+// HeaderWritten returns true if the response header was already written.
+func (c *response) HeaderWritten() bool {
+	return c.headerWritten
 }
 
 // WriteHeader sends an HTTP response header with the provided status code.
@@ -75,6 +84,7 @@ func (r *response) WriteHeaderNow() {
 	if !r.Written() {
 		r.size = 0
 		r.ResponseWriter.WriteHeader(r.status)
+		r.headerWritten = true
 	}
 }
 

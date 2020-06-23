@@ -56,16 +56,15 @@ func TestContext_HeadersSent(t *testing.T) {
 		{
 			func(c *Context) {
 				c.End()
-				c.Send("hi")
 			},
-			false,
+			true,
 		},
 	}
 
 	for _, tt := range tests {
 		c := NewContext(nil, httptest.NewRecorder())
 		tt.handle(c)
-		if got := c.HeadersSent; got != tt.expected {
+		if got := c.HeadersSent(); got != tt.expected {
 			t.Errorf(testErrorFormat, got, tt.expected)
 		}
 	}
