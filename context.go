@@ -6,7 +6,6 @@ package soon
 
 import (
 	"fmt"
-	"html"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -164,35 +163,6 @@ func (c *Context) Location(url string) {
 	c.Set("Location", util.EncodeURI(url))
 }
 
-// Redirect to the given `url` with `status` defaulting to 302.
-func (c *Context) Redirect(status int, url string) {
-	if status <= 0 {
-		status = http.StatusFound
-	}
-
-	c.Location(url)
-	body, address, statusText := "", c.Get("Location"), http.StatusText(status)
-	c.Format(map[string]Handle{
-		"html": func(c *Context) {
-			u := html.EscapeString(address)
-			body = "<p>" + statusText + ". Redirecting to <a href=\"" + u + "\">" + u + "</a></p>"
-		},
-		"text": func(c *Context) {
-			body = statusText + ". Redirecting to " + address
-		},
-	})
-
-	c.Status(status)
-	c.Set("Content-Length", len([]byte(body)))
-
-	if c.Request.Method == http.MethodHead {
-		c.End()
-	} else {
-		c.String(body)
-		c.End()
-	}
-}
-
 // Sets the HTTP response Content-Disposition header field to “attachment”.
 // If a filename is given, then it sets the Content-Type based on the extension
 // name via c.Type(), and sets the Content-Disposition “filename=” parameter.
@@ -340,6 +310,11 @@ func (c *Context) Json(v interface{}) {
 // to c.Json(), except that it opts-in to JSONP callback support.
 func (c *Context) Jsonp(v interface{}) {
 	c.Render(renderer.JSONP{Data: v})
+}
+
+// Redirect to the given `location` with `status`.
+func (c *Context) Redirect(status int, location string) {
+	c.Render(renderer.Redirect{Code: status, Location: location})
 }
 
 // sets the common http header.

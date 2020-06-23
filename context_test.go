@@ -408,66 +408,6 @@ func TestContext_Location(t *testing.T) {
 	}
 }
 
-func TestContext_Redirect(t *testing.T) {
-	tests := []struct {
-		status           int
-		url              string
-		accept           string
-		method           string
-		expectedStatus   int
-		expectedLocation string
-		expectedBody     string
-	}{
-		{
-			200,
-			"/foo/bar",
-			"",
-			"GET",
-			200,
-			"/foo/bar",
-			"<p>OK. Redirecting to <a href=\"/foo/bar\">/foo/bar</a></p>",
-		},
-		{
-			302,
-			"/foo/bar",
-			"",
-			"GET",
-			302,
-			"/foo/bar",
-			"<p>Found. Redirecting to <a href=\"/foo/bar\">/foo/bar</a></p>",
-		},
-		{
-			302,
-			"/foo/bar",
-			"text/plain",
-			"GET",
-			302,
-			"/foo/bar",
-			"Found. Redirecting to /foo/bar",
-		},
-		{302, "/foo/bar", "text/plain", "HEAD", 302, "/foo/bar", ""},
-		{0, "/foo/bar", "", "HEAD", 302, "/foo/bar", ""},
-	}
-
-	for _, tt := range tests {
-		c := NewContext(httptest.NewRequest(tt.method, "/", nil), httptest.NewRecorder())
-		if tt.accept != "" {
-			c.Request.Header.Set("Accept", tt.accept)
-		}
-		c.Redirect(tt.status, tt.url)
-		w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
-		if got := c.response.Status(); got != tt.expectedStatus {
-			t.Errorf(testErrorFormat, got, tt.expectedStatus)
-		}
-		if got := c.Get("Location"); got != tt.expectedLocation {
-			t.Errorf(testErrorFormat, got, tt.expectedLocation)
-		}
-		if got := w.Body.String(); got != tt.expectedBody {
-			t.Errorf(testErrorFormat, got, tt.expectedBody)
-		}
-	}
-}
-
 func TestContext_Attachment(t *testing.T) {
 	tests := []struct {
 		s        string
@@ -1055,6 +995,87 @@ func TestContext_Jsonp(t *testing.T) {
 		if got := w.Body.String(); got != tt.expectedBody {
 			t.Errorf(testErrorFormat, got, tt.expectedBody)
 		}
+	}
+}
+
+func TestContext_Redirect(t *testing.T) {
+	deferFn1 := func(w *httptest.ResponseRecorder, code int, cType, loc, body string) {
+		if err := recover(); err == nil {
+			t.Errorf(testErrorFormat, "nil", "error")
+		}
+		if got := w.Code; got != code {
+			t.Errorf(testErrorFormat, got, code)
+		}
+		if got := w.Header().Get("Content-Type"); got != cType {
+			t.Errorf(testErrorFormat, got, cType)
+		}
+		if got := w.Header().Get("Location"); got != loc {
+			t.Errorf(testErrorFormat, got, loc)
+		}
+		if got := w.Body.String(); got != body {
+			t.Errorf(testErrorFormat, got, body)
+		}
+	}
+	deferFn2 := func(w *httptest.ResponseRecorder, code int, contentType, location, body string) {
+		if err := recover(); err != nil {
+			t.Errorf(testErrorFormat, err, "nil")
+		}
+	}
+	tests := []struct {
+		status         int
+		location       string
+		method         string
+		expectedStatus int
+		expectedType   string
+		expectedLoc    string
+		expectedBody   string
+		deferFn        func(w *httptest.ResponseRecorder, code int, cType, loc, body string)
+	}{
+		{200, "/foo/bar", "GET", 200, "", "", "", deferFn1},
+		{309, "/foo/bar", "POST", 200, "", "", "", deferFn1},
+		{
+			201,
+			"/foo/bar",
+			"GET",
+			201,
+			"text/html; charset=utf-8",
+			"/foo/bar",
+			"<a href=\"/foo/bar\">Created</a>.\n\n",
+			deferFn2,
+		},
+		{301, "/foo/bar", "HEAD", 301, "text/html; charset=utf-8", "/foo/bar", "", deferFn2},
+		{
+			302,
+			"http://google.com",
+			"GET",
+			302,
+			"text/html; charset=utf-8",
+			"http://google.com",
+			"<a href=\"http://google.com\">Found</a>.\n\n",
+			deferFn2,
+		},
+		{302, "http://google.com", "POST", 302, "", "http://google.com", "", deferFn2},
+	}
+
+	for _, tt := range tests {
+		t.Run("", func(t *testing.T) {
+			c := NewContext(httptest.NewRequest(tt.method, "/", nil), httptest.NewRecorder())
+			w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
+			defer tt.deferFn(w, tt.expectedStatus, tt.expectedType, tt.expectedLoc, tt.expectedBody)
+			c.Redirect(tt.status, tt.location)
+			if got := c.response.Status(); got != tt.expectedStatus {
+				t.Errorf(testErrorFormat, got, tt.expectedStatus)
+			}
+			if got := w.Header().Get("Content-Type"); got != tt.expectedType {
+				t.Errorf(testErrorFormat, got, tt.expectedType)
+			}
+			if got := c.Get("Location"); got != tt.expectedLoc {
+				t.Errorf(testErrorFormat, got, tt.expectedLoc)
+			}
+			if got := w.Body.String(); got != tt.expectedBody {
+				t.Errorf(testErrorFormat, got, tt.expectedBody)
+			}
+		})
 	}
 }
 

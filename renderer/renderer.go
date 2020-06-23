@@ -20,4 +20,5 @@ var (
 	_ Renderer = JSON{}
 	_ Renderer = File{}
 	_ Renderer = JSONP{}
+	_ Renderer = Redirect{}
 )
