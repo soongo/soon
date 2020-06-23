@@ -6,10 +6,12 @@ package soon
 
 import (
 	"fmt"
+	"html"
 	"net/http"
 	"net/url"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/soongo/soon/renderer"
@@ -88,20 +90,26 @@ func (c *Context) Append(key string, value interface{}) {
 	util.AddHeader(c.Writer, key, value)
 }
 
-// Get gets the first value of response header associated with the given key.
+// Gets the first value of response header associated with the given key.
 // If there are no values associated with the key, Get returns "".
 // It is case insensitive
 func (c *Context) Get(field string) string {
 	return c.Writer.Header().Get(field)
 }
 
-// Set sets the response header entries associated with key to the
+// Sets the response header entries associated with key to the
 // single element value. It replaces any existing values
 // associated with key. The key is case insensitive;
 //
 // To set multiple fields at once, pass a string map as the parameter.
 func (c *Context) Set(value ...interface{}) {
 	util.SetHeader(c.Writer, value...)
+}
+
+// Vary adds `field` to Vary. If already present in the Vary set, then
+// this call is simply ignored.
+func (c *Context) Vary(fields ...string) {
+	util.Vary(c.Writer, fields)
 }
 
 // Status sets the HTTP status for the response.
@@ -121,6 +129,68 @@ func (c *Context) SendStatus(code int) {
 // “/” character, then it sets the Content-Type to type.
 func (c *Context) Type(s string) {
 	util.SetContentType(c.Writer, s)
+}
+
+// Links sets Link header field with the given `links`.
+func (c *Context) Links(links map[string]string) {
+	link := strings.Trim(c.Get("Link"), " ")
+	if link != "" {
+		link += ", "
+	}
+
+	i, length := 0, len(links)
+	for k, v := range links {
+		link += "<" + v + ">; rel=\"" + k + "\""
+		i++
+		if i < length {
+			link += ", "
+		}
+	}
+
+	c.Set("Link", link)
+}
+
+// Location sets the location header to `url`.
+// The given `url` can also be "back", which redirects
+// to the _Referrer_ or _Referer_ headers or "/".
+func (c *Context) Location(url string) {
+	url = strings.Trim(url, " ")
+	if url == "back" {
+		url = c.Get("Referrer")
+		if url == "" {
+			url = "/"
+		}
+	}
+	c.Set("Location", util.EncodeURI(url))
+}
+
+// Redirect to the given `url` with `status` defaulting to 302.
+func (c *Context) Redirect(status int, url string) {
+	if status <= 0 {
+		status = http.StatusFound
+	}
+
+	c.Location(url)
+	body, address, statusText := "", c.Get("Location"), http.StatusText(status)
+	c.Format(map[string]Handle{
+		"html": func(c *Context) {
+			u := html.EscapeString(address)
+			body = "<p>" + statusText + ". Redirecting to <a href=\"" + u + "\">" + u + "</a></p>"
+		},
+		"text": func(c *Context) {
+			body = statusText + ". Redirecting to " + address
+		},
+	})
+
+	c.Status(status)
+	c.Set("Content-Length", len([]byte(body)))
+
+	if c.Request.Method == http.MethodHead {
+		c.End()
+	} else {
+		c.String(body)
+		c.End()
+	}
 }
 
 // Sets the HTTP response Content-Disposition header field to “attachment”.
@@ -194,15 +264,16 @@ func (c *Context) Download(filePath string, options *renderer.FileOptions) {
 // with data, instead use methods such as c.Send() and c.Json().
 func (c *Context) End() {
 	c.finished = true
+	c.Writer.Flush()
 }
 
 // Format responds to the Acceptable formats using an `map`
 // of mime-type callbacks.
 //
 // This method uses `req.accepted`, an array of acceptable types ordered by
-// their quality values. When "Accept" is not present the _first_ callback is
-// invoked, otherwise the first match is used. When no match is performed the
-// server responds with 406 "Not Acceptable".
+// their quality values. When "Accept" is not present the first after sorted
+// callback is invoked, otherwise the first match is used. When no match is
+// performed the server responds with 406 "Not Acceptable".
 //
 // Content-Type is set for you, however you may alter this within the callback
 // using `c.Type()` or `c.Set("Content-Type", ...)`.
@@ -225,13 +296,16 @@ func (c *Context) Format(m map[string]Handle) {
 		keys[i] = k
 		i++
 	}
+
+	// TODO: keys of map is not at determined order
 	sort.Strings(keys)
+
 	var acceptsKeys []string
 	if len(keys) > 0 {
 		acceptsKeys = c.Request.Accepts(keys...)
 	}
 
-	util.Vary(c.Writer, []string{"Accept"})
+	c.Vary("Accept")
 
 	if len(acceptsKeys) > 0 {
 		key := acceptsKeys[0]

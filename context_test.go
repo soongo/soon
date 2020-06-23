@@ -15,10 +15,13 @@ import (
 	"path"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/soongo/soon/util"
 
 	"github.com/soongo/soon/renderer"
 )
@@ -244,6 +247,30 @@ func TestContext_Get(t *testing.T) {
 	}
 }
 
+func TestContext_Vary(t *testing.T) {
+	tests := []struct {
+		vary     string
+		fields   []string
+		expected string
+	}{
+		{"", []string{"Accept-Encoding"}, "Accept-Encoding"},
+		{"Accept-Encoding", []string{"Accept-Encoding"}, "Accept-Encoding"},
+		{"Accept-Encoding", []string{"Host"}, "Accept-Encoding, Host"},
+		{"Accept-Encoding, Host", []string{"Accept-Encoding", "Host"}, "Accept-Encoding, Host"},
+		{"Accept-Encoding, Host", []string{"Host", "User-Agent"}, "Accept-Encoding, Host, User-Agent"},
+	}
+	key := "Vary"
+	for _, tt := range tests {
+		c := NewContext(nil, httptest.NewRecorder())
+		c.Set(key, tt.vary)
+		c.Vary(tt.fields...)
+		result := c.Get(key)
+		if result != tt.expected {
+			t.Errorf(testErrorFormat, result, tt.expected)
+		}
+	}
+}
+
 func TestContext_Status(t *testing.T) {
 	tests := []struct {
 		code int
@@ -310,6 +337,133 @@ func TestContext_Type(t *testing.T) {
 		c.Type(tt.t)
 		if got := c.Get("Content-Type"); got != tt.expected {
 			t.Errorf(testErrorFormat, got, tt.expected)
+		}
+	}
+}
+
+func TestContext_Links(t *testing.T) {
+	tests := []struct {
+		origin   string
+		links    map[string]string
+		expected string
+	}{
+		{
+			"",
+			map[string]string{
+				"next": "http://api.example.com/users?page=2",
+				"last": "http://api.example.com/users?page=5",
+			},
+			"<http://api.example.com/users?page=2>; rel=\"next\", " +
+				"<http://api.example.com/users?page=5>; rel=\"last\"",
+		},
+		{
+			"<http://api.example.com/users?page=1>; rel=\"pre\"",
+			map[string]string{
+				"next": "http://api.example.com/users?page=2",
+				"last": "http://api.example.com/users?page=5",
+			},
+			"<http://api.example.com/users?page=1>; rel=\"pre\", " +
+				"<http://api.example.com/users?page=2>; rel=\"next\", " +
+				"<http://api.example.com/users?page=5>; rel=\"last\"",
+		},
+	}
+
+	for _, tt := range tests {
+		c := NewContext(nil, httptest.NewRecorder())
+		c.Set("Link", tt.origin)
+		c.Links(tt.links)
+		got := c.Get("Link")
+		arr1, arr2 := strings.Split(got, ", "), strings.Split(tt.expected, ", ")
+		if !stringSliceEquals(arr1, arr2) {
+			t.Errorf(testErrorFormat, got, tt.expected)
+		}
+	}
+}
+
+func TestContext_Location(t *testing.T) {
+	tests := []struct {
+		location string
+		referrer string
+		expected string
+	}{
+		{location: "http://example.com"},
+		{location: "http://example.com/café"},
+		{location: "/foo/bar"},
+		{location: " /foo/bar "},
+		{location: "back", expected: "/"},
+		{location: "back", referrer: "/previous", expected: "/previous"},
+	}
+	for _, tt := range tests {
+		c := NewContext(nil, httptest.NewRecorder())
+		if tt.expected == "" {
+			tt.expected = util.EncodeURI(strings.Trim(tt.location, " "))
+		}
+		if tt.referrer != "" {
+			c.Set("Referrer", tt.referrer)
+		}
+		c.Location(tt.location)
+		if got := c.Get("location"); got != tt.expected {
+			t.Errorf(testErrorFormat, got, tt.expected)
+		}
+	}
+}
+
+func TestContext_Redirect(t *testing.T) {
+	tests := []struct {
+		status           int
+		url              string
+		accept           string
+		method           string
+		expectedStatus   int
+		expectedLocation string
+		expectedBody     string
+	}{
+		{
+			200,
+			"/foo/bar",
+			"",
+			"GET",
+			200,
+			"/foo/bar",
+			"<p>OK. Redirecting to <a href=\"/foo/bar\">/foo/bar</a></p>",
+		},
+		{
+			302,
+			"/foo/bar",
+			"",
+			"GET",
+			302,
+			"/foo/bar",
+			"<p>Found. Redirecting to <a href=\"/foo/bar\">/foo/bar</a></p>",
+		},
+		{
+			302,
+			"/foo/bar",
+			"text/plain",
+			"GET",
+			302,
+			"/foo/bar",
+			"Found. Redirecting to /foo/bar",
+		},
+		{302, "/foo/bar", "text/plain", "HEAD", 302, "/foo/bar", ""},
+		{0, "/foo/bar", "", "HEAD", 302, "/foo/bar", ""},
+	}
+
+	for _, tt := range tests {
+		c := NewContext(httptest.NewRequest(tt.method, "/", nil), httptest.NewRecorder())
+		if tt.accept != "" {
+			c.Request.Header.Set("Accept", tt.accept)
+		}
+		c.Redirect(tt.status, tt.url)
+		w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
+		if got := c.response.Status(); got != tt.expectedStatus {
+			t.Errorf(testErrorFormat, got, tt.expectedStatus)
+		}
+		if got := c.Get("Location"); got != tt.expectedLocation {
+			t.Errorf(testErrorFormat, got, tt.expectedLocation)
+		}
+		if got := w.Body.String(); got != tt.expectedBody {
+			t.Errorf(testErrorFormat, got, tt.expectedBody)
 		}
 	}
 }
@@ -1053,4 +1207,10 @@ func getFileContent(p string) (os.FileInfo, string) {
 	}
 
 	return fileInfo, string(bts)
+}
+
+func stringSliceEquals(a, b []string) bool {
+	sort.StringSlice(a).Sort()
+	sort.StringSlice(b).Sort()
+	return strings.Join(a, ",") == strings.Join(b, ",")
 }
