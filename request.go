@@ -27,6 +27,19 @@ func (p Params) Set(k interface{}, v string) {
 	p[k] = v
 }
 
+// Locals contains local variables scoped to the request
+type Locals map[string]interface{}
+
+// Get returns the value of specified key in locals
+func (l Locals) Get(k string) interface{} {
+	return l[k]
+}
+
+// Set sets the value of specified key in locals
+func (l Locals) Set(k string, v interface{}) {
+	l[k] = v
+}
+
 // MarshalJSON transforms the Params object to json
 func (p Params) MarshalJSON() ([]byte, error) {
 	m := make(map[string]string, len(p))
@@ -42,11 +55,18 @@ type Request struct {
 
 	// Params contains all matched url params of the request
 	Params Params
+
+	// Locals contains local variables scoped to the request,
+	// and therefore available during that request / response cycle (if any).
+	//
+	// This property is useful for exposing request-level information such as
+	// the request path name, authenticated user, user settings, and so on.
+	Locals Locals
 }
 
 // NewRequest returns an instance of Request object
 func NewRequest(req *http.Request) *Request {
-	return &Request{Request: req, Params: make(Params, 0)}
+	return &Request{req, make(Params, 0), make(Locals, 0)}
 }
 
 // Accepts checks if the specified content types are acceptable, based on the

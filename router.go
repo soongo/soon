@@ -17,6 +17,8 @@ import (
 // http request, and dispatch a context object into the handler.
 type Handle func(*Context)
 
+type paramHandle func(*Request, string)
+
 // ErrorHandle handles the error generated in route handler, and dispatch error
 // and context objects into the error handler.
 type ErrorHandle func(interface{}, *Context)
@@ -30,6 +32,7 @@ type node struct {
 	errorHandle  ErrorHandle
 	options      *pathToRegexp.Options
 	tokens       []pathToRegexp.Token
+	router       *Router
 }
 
 func (n *node) initRegexp() {
@@ -38,8 +41,8 @@ func (n *node) initRegexp() {
 }
 
 func (n *node) buildRequestParams(c *Context) {
+	c.Request.resetParams()
 	if len(n.tokens) > 0 {
-		c.Request.resetParams()
 		match, err := n.regexp.FindStringMatch(c.Request.URL.Path)
 		if err == nil {
 			for i, g := range match.Groups() {
@@ -72,6 +75,8 @@ type Router struct {
 	Strict bool
 
 	options *pathToRegexp.Options
+
+	paramHandles map[string][]paramHandle
 }
 
 const (
@@ -99,7 +104,7 @@ func defaultErrorHandler(v interface{}, c *Context) {
 // NewRouter returns a new initialized Router with default configuration.
 // Sensitive and Strict is false by default.
 func NewRouter() *Router {
-	return &Router{}
+	return &Router{paramHandles: make(map[string][]paramHandle, 0)}
 }
 
 func (r *Router) initOptions() {
@@ -168,6 +173,7 @@ func (r *Router) useMiddleware(route string, h Handle) {
 		isMiddleware: true,
 		handle:       h,
 		options:      r.options,
+		router:       r,
 	}
 	node.initRegexp()
 	r.routes = append(r.routes, node)
@@ -180,6 +186,7 @@ func (r *Router) useErrorHandle(route string, h ErrorHandle) {
 		route:       route,
 		errorHandle: h,
 		options:     r.options,
+		router:      r,
 	}
 	node.initRegexp()
 	r.routes = append(r.routes, node)
@@ -195,6 +202,7 @@ func (r *Router) mount(mountPoint string, router *Router) {
 			handle:       v.handle,
 			errorHandle:  v.errorHandle,
 			options:      v.options,
+			router:       router,
 		}
 		node.initRegexp()
 		r.routes = append(r.routes, node)
@@ -253,16 +261,29 @@ func (r *Router) Handle(method, route string, handle Handle) {
 		isMiddleware: false,
 		handle:       handle,
 		options:      r.options,
+		router:       r,
 	}
 	node.initRegexp()
 	r.routes = append(r.routes, node)
+}
+
+// Param registers a handler on router, and the handler will be triggered
+// only by route parameters defined on router routes.
+//
+// The handler will be called only once in a request-response cycle,
+// even if the parameter is matched in multiple routes
+func (r *Router) Param(name string, handle paramHandle) {
+	if r.paramHandles[name] == nil {
+		r.paramHandles[name] = make([]paramHandle, 0)
+	}
+	r.paramHandles[name] = append(r.paramHandles[name], handle)
 }
 
 // ServeHTTP writes reply headers and data to the ResponseWriter and then return.
 // Router implements the interface http.Handler.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	c := NewContext(req, w)
-	i, urlPath := -1, req.URL.Path
+	i, urlPath, paramCalled := -1, req.URL.Path, make(map[string]string)
 	c.next = func(v ...interface{}) {
 		defer r.recv(c)
 
@@ -289,6 +310,20 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 			if node.isMiddleware || node.method == HTTPMethodAll || node.method == req.Method {
 				node.buildRequestParams(c)
+
+				if len(node.router.paramHandles) > 0 {
+					for n, handles := range node.router.paramHandles {
+						if v, ok := c.Request.Params[n]; ok {
+							if paramCalled[n] != v {
+								paramCalled[n] = v
+								for _, h := range handles {
+									h(c.Request, v)
+								}
+							}
+						}
+					}
+				}
+
 				node.handle(c)
 				return
 			}

@@ -27,13 +27,6 @@ type Context struct {
 
 	next func(v ...interface{})
 
-	// Locals contains response local variables scoped to the request,
-	// and therefore available during that request / response cycle (if any).
-	//
-	// This property is useful for exposing request-level information such as
-	// the request path name, authenticated user, user settings, and so on.
-	Locals Locals
-
 	// The finished property will be true if `context.End()` has been called.
 	finished bool
 }
@@ -42,7 +35,6 @@ type Context struct {
 func NewContext(r *http.Request, w http.ResponseWriter) *Context {
 	c := &Context{Request: NewRequest(r), response: newResponse(w)}
 	c.Writer = c.response
-	c.init()
 	return c
 }
 
@@ -51,26 +43,14 @@ func (c *Context) Next(v ...interface{}) {
 	c.next(v...)
 }
 
-// Locals contains response local variables scoped to the request.
-type Locals map[string]interface{}
-
-// Get returns the value of specified key in locals
-func (l Locals) Get(k string) interface{} {
-	return l[k]
-}
-
-// Set sets the value of specified key in locals
-func (l Locals) Set(k string, v interface{}) {
-	l[k] = v
-}
-
-func (c *Context) init() {
-	c.Locals = make(Locals, 0)
-}
-
-// Params is a shortcut method for getting params of request
+// Params is a shortcut method of request's params
 func (c *Context) Params() Params {
 	return c.Request.Params
+}
+
+// Locals is a shortcut method of request's locals
+func (c *Context) Locals() Locals {
+	return c.Request.Locals
 }
 
 // Query is a shortcut method for getting query of request

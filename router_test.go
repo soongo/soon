@@ -439,6 +439,238 @@ func TestRouter_ALL(t *testing.T) {
 	}
 }
 
+func TestRouter_Param(t *testing.T) {
+	tests := []struct {
+		method     string
+		route      string
+		path       string
+		paramName  string
+		paramValue string
+		err        error
+	}{
+		{"GET", "/:foo", "/bar", "foo", "bar", nil},
+		{"POST", "/name/:foo", "/name/bar", "foo", "bar", nil},
+		{"PATCH", "/name/:foo", "/name/bar", "foo", "bar", errors.New("err")},
+	}
+
+	for _, tt := range tests {
+		t.Run("", func(t *testing.T) {
+			router := NewRouter()
+			router.Handle(tt.method, tt.route, func(c *Context) {
+				if got := c.Locals().Get(tt.paramName); got != tt.paramValue {
+					t.Errorf(testErrorFormat, got, tt.paramValue)
+				}
+			})
+			if tt.err != nil {
+				router.Use(func(v interface{}, c *Context) {
+					if got := c.Locals().Get(tt.paramName); got != nil {
+						t.Errorf(testErrorFormat, got, nil)
+					}
+				})
+			}
+			router.Param(tt.paramName, func(r *Request, s string) {
+				if tt.err != nil {
+					panic(tt.err)
+				}
+				r.Locals.Set(tt.paramName, s)
+			})
+			server := httptest.NewServer(router)
+			defer server.Close()
+			_, _, _, err := request(tt.method, server.URL+tt.path, nil)
+			if err != nil {
+				t.Error(err)
+			}
+		})
+	}
+
+	t.Run("once", func(t *testing.T) {
+		router, calledCount := NewRouter(), 0
+		router.GET("/name/:foo", func(c *Context) {
+			c.Next()
+		})
+		router.GET("/name/:foo", func(c *Context) {
+			c.String("foo")
+		})
+		router.Param("foo", func(r *Request, s string) {
+			r.Locals.Set("foo", s)
+			calledCount++
+		})
+		server := httptest.NewServer(router)
+		defer server.Close()
+		_, _, _, err := request("GET", server.URL+"/name/bar", nil)
+		if err != nil {
+			t.Error(err)
+		}
+		if calledCount != 1 {
+			t.Errorf(testErrorFormat, calledCount, 1)
+		}
+		n := 2
+		for i := 0; i < n; i++ {
+			_, _, _, err = request("GET", server.URL+"/name/bar", nil)
+			if err != nil {
+				t.Error(err)
+			}
+		}
+		if calledCount != n+1 {
+			t.Errorf(testErrorFormat, calledCount, n+1)
+		}
+	})
+
+	t.Run("multiple", func(t *testing.T) {
+		router, calledCount := NewRouter(), 0
+		router.Use("/:foo", func(c *Context) {
+			if c.Locals().Get("foo") != "name" {
+				t.Errorf(testErrorFormat, c.Locals().Get("foo"), "name")
+			}
+			c.Next()
+		})
+		router.GET("/name/:foo/:bar", func(c *Context) {
+			if c.Locals().Get("foo") != "id" {
+				t.Errorf(testErrorFormat, c.Locals().Get("foo"), "id")
+			}
+			c.Next()
+		})
+		router.GET("/name/:foo/:bar", func(c *Context) {
+			if c.Locals().Get("foo") != "id" {
+				t.Errorf(testErrorFormat, c.Locals().Get("foo"), "id")
+			}
+			c.Next()
+		})
+		router.GET("/name/id/:foo", func(c *Context) {
+			if c.Locals().Get("foo") != "bar" {
+				t.Errorf(testErrorFormat, c.Locals().Get("foo"), "bar")
+			}
+			c.String("foo")
+		})
+		router.Param("foo", func(r *Request, s string) {
+			r.Locals.Set("foo", s)
+			calledCount++
+		})
+		server := httptest.NewServer(router)
+		defer server.Close()
+		_, _, _, err := request("GET", server.URL+"/name/id/bar", nil)
+		if err != nil {
+			t.Error(err)
+		}
+		if calledCount != 3 {
+			t.Errorf(testErrorFormat, calledCount, 3)
+		}
+		n := 2
+		for i := 0; i < n; i++ {
+			_, _, _, err = request("GET", server.URL+"/name/id/bar", nil)
+			if err != nil {
+				t.Error(err)
+			}
+		}
+		if calledCount != n*3+3 {
+			t.Errorf(testErrorFormat, calledCount, n*3+3)
+		}
+	})
+
+	t.Run("sub-router", func(t *testing.T) {
+		t.Run("", func(t *testing.T) {
+			router, subRouter, calledCount := NewRouter(), NewRouter(), 0
+			router.GET("/name/:foo", func(c *Context) {
+				c.String("body")
+			})
+			subRouter.Param("foo", func(r *Request, s string) {
+				calledCount++
+			})
+			router.Use(subRouter)
+			server := httptest.NewServer(router)
+			defer server.Close()
+			_, _, _, err := request("GET", server.URL+"/name/bar", nil)
+			if err != nil {
+				t.Error(err)
+			}
+			if calledCount != 0 {
+				t.Errorf(testErrorFormat, calledCount, 0)
+			}
+		})
+
+		t.Run("", func(t *testing.T) {
+			router, subRouter, calledCount := NewRouter(), NewRouter(), 0
+			subRouter.GET("/name/:foo", func(c *Context) {
+				c.String("body")
+			})
+			subRouter.Param("foo", func(r *Request, s string) {
+				calledCount++
+			})
+			router.Use(subRouter)
+			server := httptest.NewServer(router)
+			defer server.Close()
+			_, _, _, err := request("GET", server.URL+"/name/bar", nil)
+			if err != nil {
+				t.Error(err)
+			}
+			if calledCount != 1 {
+				t.Errorf(testErrorFormat, calledCount, 1)
+			}
+		})
+
+		t.Run("", func(t *testing.T) {
+			router, subRouter, calledCount := NewRouter(), NewRouter(), 0
+			router.Use("/:foo", func(c *Context) {
+				c.Next()
+			})
+			router.GET("/name/:foo", func(c *Context) {
+				c.Next()
+			})
+			subRouter.Use("/:foo", func(c *Context) {
+				c.Next()
+			})
+			subRouter.GET("/name/:foo", func(c *Context) {
+				c.String("body")
+			})
+			subRouter.Param("foo", func(r *Request, s string) {
+				calledCount++
+			})
+			router.Use(subRouter)
+			server := httptest.NewServer(router)
+			defer server.Close()
+			_, _, _, err := request("GET", server.URL+"/name/bar", nil)
+			if err != nil {
+				t.Error(err)
+			}
+			if calledCount != 2 {
+				t.Errorf(testErrorFormat, calledCount, 2)
+			}
+		})
+
+		t.Run("", func(t *testing.T) {
+			router, subRouter, calledCount := NewRouter(), NewRouter(), 0
+			router.Use("/:foo", func(c *Context) {
+				c.Next()
+			})
+			router.GET("/name/:foo", func(c *Context) {
+				c.Next()
+			})
+			router.Param("foo", func(r *Request, s string) {
+				calledCount++
+			})
+			subRouter.Use("/:foo", func(c *Context) {
+				c.Next()
+			})
+			subRouter.GET("/name/:foo", func(c *Context) {
+				c.String("body")
+			})
+			subRouter.Param("foo", func(r *Request, s string) {
+				calledCount++
+			})
+			router.Use(subRouter)
+			server := httptest.NewServer(router)
+			defer server.Close()
+			_, _, _, err := request("GET", server.URL+"/name/bar", nil)
+			if err != nil {
+				t.Error(err)
+			}
+			if calledCount != 4 {
+				t.Errorf(testErrorFormat, calledCount, 4)
+			}
+		})
+	})
+}
+
 func TestRouter_Use(t *testing.T) {
 	deferFn := func() {
 		if err := recover(); err == nil {

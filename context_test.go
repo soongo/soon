@@ -84,8 +84,8 @@ func TestContext_Locals(t *testing.T) {
 
 	for _, tt := range tests {
 		c := NewContext(nil, httptest.NewRecorder())
-		c.Locals.Set(tt.k, tt.v)
-		if got := c.Locals.Get(tt.k); !reflect.DeepEqual(got, tt.v) {
+		c.Locals().Set(tt.k, tt.v)
+		if got := c.Locals().Get(tt.k); !reflect.DeepEqual(got, tt.v) {
 			t.Errorf(testErrorFormat, got, tt.v)
 		}
 	}
