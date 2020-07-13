@@ -6,6 +6,7 @@ package soon
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/soongo/soon/util"
 
@@ -40,10 +41,10 @@ func (n *node) initRegexp() {
 		n.route, &n.tokens, n.options))
 }
 
-func (n *node) buildRequestParams(c *Context) {
+func (n *node) buildRequestParams(c *Context, urlPath string) {
 	c.Request.resetParams()
 	if len(n.tokens) > 0 {
-		match, err := n.regexp.FindStringMatch(c.Request.URL.Path)
+		match, err := n.regexp.FindStringMatch(urlPath)
 		if err == nil {
 			for i, g := range match.Groups() {
 				if i > 0 {
@@ -282,8 +283,8 @@ func (r *Router) Param(name string, handle paramHandle) {
 // ServeHTTP writes reply headers and data to the ResponseWriter and then return.
 // Router implements the interface http.Handler.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	c := NewContext(req, w)
-	i, urlPath, paramCalled := -1, req.URL.Path, make(map[string]string)
+	c, i, paramCalled := NewContext(req, w), -1, make(map[string]string)
+
 	c.next = func(v ...interface{}) {
 		defer r.recv(c)
 
@@ -296,11 +297,17 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		node := r.routes[i]
-		if node.match(urlPath) {
+		node, urlPath := r.routes[i], req.URL.Path
+		isMiddleware, isErrorHandler := node.isMiddleware, node.isErrorHandler()
+		match := node.match(urlPath)
+		if !match && (isMiddleware || isErrorHandler) && !strings.HasSuffix(urlPath, "/") {
+			urlPath += "/"
+			match = node.match(urlPath)
+		}
+		if match {
 			if len(v) > 0 && v[0] != nil {
-				if node.isErrorHandler() {
-					node.buildRequestParams(c)
+				if isErrorHandler {
+					node.buildRequestParams(c, urlPath)
 					node.errorHandle(v[0], c)
 					return
 				}
@@ -309,7 +316,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			}
 
 			if node.isMiddleware || node.method == HTTPMethodAll || node.method == req.Method {
-				node.buildRequestParams(c)
+				node.buildRequestParams(c, urlPath)
 
 				if len(node.router.paramHandles) > 0 {
 					for n, handles := range node.router.paramHandles {

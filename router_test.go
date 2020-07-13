@@ -16,14 +16,16 @@ import (
 type header map[string]string
 
 type test struct {
-	route       string
-	path        string
-	statusCode  int
-	header      header
-	body        string
-	middleware  func(c *Context)
-	err         interface{}
-	errorHandle func(v interface{}, c *Context)
+	route             string
+	middlewareRoute   string
+	errorHandlerRoute string
+	path              string
+	statusCode        int
+	header            header
+	body              string
+	middleware        func(c *Context)
+	err               interface{}
+	errorHandle       func(v interface{}, c *Context)
 }
 
 const (
@@ -207,6 +209,33 @@ func TestRouterMiddleware(t *testing.T) {
 			},
 		},
 		{
+			route:      "/foo/:foo",
+			path:       "/foo/foo1",
+			statusCode: 200,
+			middleware: func(c *Context) {
+				c.Send(body200)
+			},
+		},
+		{
+			route:           "/foo/:foo/bar/:bar",
+			path:            "/foo/foo1/bar/bar1",
+			middlewareRoute: "/foo/:foo",
+			statusCode:      200,
+			middleware: func(c *Context) {
+				c.Send(body200)
+			},
+		},
+		{
+			route:           "/foo/:foo/bar/:bar",
+			path:            "/foo/foo1/bar/bar1",
+			middlewareRoute: "/foo/bar/:foo",
+			statusCode:      200,
+			body:            body200,
+			middleware: func(c *Context) {
+				c.Send(body404)
+			},
+		},
+		{
 			route:      "/",
 			path:       "/404",
 			statusCode: 404,
@@ -246,6 +275,35 @@ func TestRouterMiddleware(t *testing.T) {
 			},
 		},
 		{
+			route:      "/foo/:foo",
+			path:       "/foo/foo1",
+			statusCode: 200,
+			err:        errors.New(body200),
+			errorHandle: func(v interface{}, c *Context) {
+				c.Send(v.(error).Error())
+			},
+		},
+		{
+			route:             "/foo/:foo/bar/:bar",
+			path:              "/foo/foo1/bar/bar1",
+			errorHandlerRoute: "/foo/:bar",
+			statusCode:        200,
+			err:               errors.New(body200),
+			errorHandle: func(v interface{}, c *Context) {
+				c.Send(v.(error).Error())
+			},
+		},
+		{
+			route:             "/foo/:foo/bar/:bar",
+			path:              "/foo/foo1/bar/bar1",
+			errorHandlerRoute: "/foo/bar/:foo",
+			statusCode:        500,
+			err:               errors.New(body200),
+			errorHandle: func(v interface{}, c *Context) {
+				c.Send(v.(error).Error())
+			},
+		},
+		{
 			route:      "/",
 			path:       "/",
 			statusCode: 500,
@@ -269,11 +327,11 @@ func TestRouterMiddleware(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			router := NewRouter()
 			if tt.middleware != nil {
-				router.Use(tt.middleware)
+				router.Use(stringOr(tt.middlewareRoute, tt.route), tt.middleware)
 			}
 			router.GET(tt.route, makeHandle(tt))
 			if tt.errorHandle != nil {
-				router.Use(tt.errorHandle)
+				router.Use(stringOr(tt.errorHandlerRoute, tt.route), tt.errorHandle)
 			}
 			server := httptest.NewServer(router)
 			defer server.Close()
@@ -712,4 +770,11 @@ func TestRouter_Use(t *testing.T) {
 			}
 		})
 	}
+}
+
+func stringOr(s1, s2 string) string {
+	if s1 != "" {
+		return s1
+	}
+	return s2
 }
