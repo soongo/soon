@@ -772,6 +772,91 @@ func TestRouter_Use(t *testing.T) {
 	}
 }
 
+func TestRouterProxy(t *testing.T) {
+	expectedBody, route := "OK", "/foo"
+	handle := func(c *Context) {
+		c.String(expectedBody)
+	}
+
+	t.Run("one-by-one", func(t *testing.T) {
+		for _, method := range append(methods, HTTPMethodAll) {
+			t.Run(method, func(t *testing.T) {
+				router := NewRouter()
+				router.Route(route).Handle(method, handle)
+				server := httptest.NewServer(router)
+				defer server.Close()
+				statusCode, _, body, err := request(method, server.URL+route, nil)
+				if err != nil {
+					t.Error(err)
+				}
+				if statusCode != 200 {
+					t.Errorf(testErrorFormat, statusCode, 200)
+				}
+				if method != http.MethodHead && body != expectedBody {
+					t.Errorf(testErrorFormat, body, expectedBody)
+				}
+			})
+		}
+
+		t.Run("with-next", func(t *testing.T) {
+			router := NewRouter()
+			router.Route(route).ALL(func(c *Context) {
+				c.Next()
+			}).GET(handle)
+			server := httptest.NewServer(router)
+			defer server.Close()
+			statusCode, _, body, err := request(http.MethodGet, server.URL+route, nil)
+			if err != nil {
+				t.Error(err)
+			}
+			if statusCode != 200 {
+				t.Errorf(testErrorFormat, statusCode, 200)
+			}
+			if body != expectedBody {
+				t.Errorf(testErrorFormat, body, expectedBody)
+			}
+		})
+
+		t.Run("without-next", func(t *testing.T) {
+			router := NewRouter()
+			router.Route(route).ALL(func(c *Context) {}).GET(handle)
+			server := httptest.NewServer(router)
+			defer server.Close()
+			statusCode, _, body, err := request(http.MethodGet, server.URL+route, nil)
+			if err != nil {
+				t.Error(err)
+			}
+			if statusCode != 200 {
+				t.Errorf(testErrorFormat, statusCode, 200)
+			}
+			if body != "" {
+				t.Errorf(testErrorFormat, body, "")
+			}
+		})
+	})
+
+	t.Run("all", func(t *testing.T) {
+		h, router := handle, NewRouter()
+		router.Route(route).GET(h).HEAD(h).POST(h).PUT(h).PATCH(h).DELETE(h).OPTIONS(h)
+		server := httptest.NewServer(router)
+		defer server.Close()
+		for _, method := range methods {
+			t.Run(method, func(t *testing.T) {
+				statusCode, _, body, err := request(method, server.URL+route, nil)
+				if err != nil {
+					t.Error(err)
+				}
+				if statusCode != 200 {
+					t.Errorf(testErrorFormat, statusCode, 200)
+				}
+				if method != http.MethodHead && expectedBody != body {
+					t.Errorf(testErrorFormat, expectedBody, body)
+				}
+			})
+		}
+	})
+}
+
 func stringOr(s1, s2 string) string {
 	if s1 != "" {
 		return s1

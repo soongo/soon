@@ -341,3 +341,61 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	c.next()
 }
+
+// Route returns an instance of a single route which you can then use to handle
+// HTTP verbs with optional middleware.
+// Use router.route() to avoid duplicate route naming and thus typing errors.
+func (r *Router) Route(route string) *routerProxy {
+	return &routerProxy{router: r, route: route}
+}
+
+type routerProxy struct {
+	router *Router
+	route  string
+}
+
+// GET is a shortcut for Handle("GET", handle)
+func (r *routerProxy) GET(h Handle) *routerProxy {
+	return r.Handle(http.MethodGet, h)
+}
+
+// HEAD is a shortcut for Handle("HEAD", handle)
+func (r *routerProxy) HEAD(h Handle) *routerProxy {
+	return r.Handle(http.MethodHead, h)
+}
+
+// POST is a shortcut for Handle("POST", handle)
+func (r *routerProxy) POST(h Handle) *routerProxy {
+	return r.Handle(http.MethodPost, h)
+}
+
+// PUT is a shortcut for Handle("PUT", handle)
+func (r *routerProxy) PUT(h Handle) *routerProxy {
+	return r.Handle(http.MethodPut, h)
+}
+
+// PATCH is a shortcut for Handle("PATCH", handle)
+func (r *routerProxy) PATCH(h Handle) *routerProxy {
+	return r.Handle(http.MethodPatch, h)
+}
+
+// DELETE is a shortcut for Handle("DELETE", handle)
+func (r *routerProxy) DELETE(h Handle) *routerProxy {
+	return r.Handle(http.MethodDelete, h)
+}
+
+// OPTIONS is a shortcut for Handle("OPTIONS", handle)
+func (r *routerProxy) OPTIONS(h Handle) *routerProxy {
+	return r.Handle(http.MethodOptions, h)
+}
+
+// ALL means any http method
+func (r *routerProxy) ALL(h Handle) *routerProxy {
+	return r.Handle(HTTPMethodAll, h)
+}
+
+// Handle registers the handler for matched method
+func (r *routerProxy) Handle(method string, h Handle) *routerProxy {
+	r.router.Handle(method, r.route, h)
+	return r
+}
