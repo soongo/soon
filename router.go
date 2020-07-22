@@ -72,7 +72,7 @@ type Router struct {
 	// When true the regexp will be case sensitive. (default: false)
 	Sensitive bool
 
-	// When true the regexp allows an optional trailing delimiter to match. (default: false)
+	// When true the regexp won't allow an optional trailing delimiter to match. (default: false)
 	Strict bool
 
 	options *pathToRegexp.Options
@@ -196,6 +196,7 @@ func (r *Router) useErrorHandle(route string, h ErrorHandle) {
 func (r *Router) mount(mountPoint string, router *Router) {
 	for _, v := range router.routes {
 		route := util.RouteJoin(mountPoint, v.route)
+		route = util.AddPrefixSlash(strings.TrimSuffix(route, "/"))
 		node := &node{
 			method:       v.method,
 			route:        route,
@@ -255,10 +256,9 @@ func (r *Router) ALL(route string, handle Handle) {
 // and route, and dispatch a context object into the handler.
 func (r *Router) Handle(method, route string, handle Handle) {
 	r.initOptions()
-	route = util.AddPrefixSlash(route)
 	node := &node{
 		method:       method,
-		route:        route,
+		route:        util.AddPrefixSlash(strings.TrimSuffix(route, "/")),
 		isMiddleware: false,
 		handle:       handle,
 		options:      r.options,

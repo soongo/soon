@@ -150,7 +150,7 @@ func TestRouterWithDefaultOptions(t *testing.T) {
 		{route: "/", path: "", statusCode: 200, body: body200},
 		{route: "//", path: "/", statusCode: 200, body: body200},
 		{route: "//", path: "//", statusCode: 200, body: body200},
-		{route: "//", path: "///", statusCode: 200, body: body200},
+		{route: "//", path: "///", statusCode: 404, body: body404},
 		{route: "", path: "/", statusCode: 200, body: body200},
 		{route: "", path: "", statusCode: 200, body: body200},
 		{
@@ -163,7 +163,7 @@ func TestRouterWithDefaultOptions(t *testing.T) {
 		{route: "/health-check/", path: "/health-check", statusCode: 200, body: body200},
 		{route: "/health-check//", path: "/health-check/", statusCode: 200, body: body200},
 		{route: "/health-check//", path: "/health-check//", statusCode: 200, body: body200},
-		{route: "/health-check//", path: "/health-check///", statusCode: 200, body: body200},
+		{route: "/health-check//", path: "/health-check///", statusCode: 404, body: body404},
 		{route: "/health-check", path: "/health-check/", statusCode: 200, body: body200},
 		{route: "/health-check", path: "/health-check", statusCode: 200, body: body200},
 	}
@@ -850,7 +850,7 @@ func TestRouterProxy(t *testing.T) {
 					t.Errorf(testErrorFormat, statusCode, 200)
 				}
 				if method != http.MethodHead && expectedBody != body {
-					t.Errorf(testErrorFormat, expectedBody, body)
+					t.Errorf(testErrorFormat, body, expectedBody)
 				}
 			})
 		}
