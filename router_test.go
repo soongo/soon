@@ -19,6 +19,7 @@ type test struct {
 	route             string
 	middlewareRoute   string
 	errorHandlerRoute string
+	routerOption      *RouterOption
 	path              string
 	statusCode        int
 	header            header
@@ -86,7 +87,7 @@ func request(method, url string, h http.Header) (statusCode int,
 	return
 }
 
-func TestRouterWithDefaultOptions(t *testing.T) {
+func TestRouter(t *testing.T) {
 	tests := []test{
 		{route: "/", path: "/", statusCode: 200, body: body200},
 		{route: "/", path: "", statusCode: 200, body: body200},
@@ -102,18 +103,39 @@ func TestRouterWithDefaultOptions(t *testing.T) {
 			header:     header{"User-Agent": "go-http-client"},
 			body:       body200,
 		},
+		{
+			route:        "/HEALTH-check/",
+			routerOption: &RouterOption{true, true},
+			path:         "/health-check/",
+			statusCode:   404,
+			body:         body404,
+		},
 		{route: "/health-check/", path: "/health-check", statusCode: 404, body: body404},
 		{route: "/health-check//", path: "/health-check/", statusCode: 404, body: body404},
 		{route: "/health-check//", path: "/health-check//", statusCode: 200, body: body200},
 		{route: "/health-check//", path: "/health-check///", statusCode: 404, body: body404},
 		{route: "/health-check", path: "/health-check/", statusCode: 200, body: body200},
+		{
+			route:        "/health-check",
+			routerOption: &RouterOption{false, true},
+			path:         "/health-check/",
+			statusCode:   404,
+			body:         body404,
+		},
+		{
+			route:        "/health-check/",
+			routerOption: &RouterOption{false, true},
+			path:         "/health-check/",
+			statusCode:   404,
+			body:         body404,
+		},
 		{route: "/health-check", path: "/health-check", statusCode: 200, body: body200},
 	}
 
 	t.Run("one-by-one", func(t *testing.T) {
 		for _, tt := range tests {
 			t.Run("", func(t *testing.T) {
-				router := NewRouter()
+				router := NewRouter(tt.routerOption)
 				router.GET(tt.route, makeHandle(tt))
 				server := httptest.NewServer(router)
 				defer server.Close()
@@ -189,6 +211,74 @@ func TestRouterWithDefaultOptions(t *testing.T) {
 					if header.Get(k) != v {
 						t.Errorf(testErrorFormat, header.Get(k), v)
 					}
+				}
+				if body != tt.body {
+					t.Errorf(testErrorFormat, body, tt.body)
+				}
+			})
+		}
+	})
+
+	t.Run("sub-router-with-custom-options", func(t *testing.T) {
+		router := NewRouter(&RouterOption{true, true})
+		router_1 := NewRouter()
+		router_1.GET("/1-a", func(c *Context) {
+			c.String(body200)
+		})
+		router_1_1 := NewRouter(&RouterOption{false, false})
+		router_1_1.GET("/1-1-a", func(c *Context) {
+			c.String(body200)
+		})
+		router_1_1_1 := NewRouter()
+		router_1_1_1.GET("/1-1-1-a", func(c *Context) {
+			c.String(body200)
+		})
+		router_1_1_1.GET("/1-1-1-a/b", func(c *Context) {
+			c.Next()
+		})
+		router_1_1_1_1 := NewRouter(&RouterOption{true, true})
+		router_1_1_1_1.GET("/1-1-1-a/b", func(c *Context) {
+			c.String(body200)
+		})
+		router_1_1_1.Use("/", router_1_1_1_1)
+		router_1_1.Use("/1-1", router_1_1_1)
+		router_1.Use("/1", router_1_1)
+		router.Use("/", router_1)
+
+		server := httptest.NewServer(router)
+		defer server.Close()
+
+		tests := []struct {
+			path       string
+			statusCode int
+			body       string
+		}{
+			{"/1-a", 200, body200},
+			{"/1-a/", 404, body404},
+			{"/1-A", 404, body404},
+			{"/1-A/", 404, body404},
+			{"/1/1-1-a", 200, body200},
+			{"/1/1-1-a/", 200, body200},
+			{"/1/1-1-A", 200, body200},
+			{"/1/1-1-A/", 200, body200},
+			{"/1/1-1/1-1-1-a", 200, body200},
+			{"/1/1-1/1-1-1-a/", 200, body200},
+			{"/1/1-1/1-1-1-A", 200, body200},
+			{"/1/1-1/1-1-1-A/", 200, body200},
+			{"/1/1-1/1-1-1-a/b", 200, body200},
+			{"/1/1-1/1-1-1-a/b/", 404, body404},
+			{"/1/1-1/1-1-1-A/B", 404, body404},
+			{"/1/1-1/1-1-1-A/B/", 404, body404},
+		}
+
+		for _, tt := range tests {
+			t.Run("", func(t *testing.T) {
+				statusCode, _, body, err := request("GET", server.URL+tt.path, nil)
+				if err != nil {
+					t.Error(err)
+				}
+				if statusCode != tt.statusCode {
+					t.Errorf(testErrorFormat, statusCode, tt.statusCode)
 				}
 				if body != tt.body {
 					t.Errorf(testErrorFormat, body, tt.body)

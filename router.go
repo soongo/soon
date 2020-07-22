@@ -31,14 +31,17 @@ type node struct {
 	isMiddleware bool
 	handle       Handle
 	errorHandle  ErrorHandle
-	options      *pathToRegexp.Options
 	tokens       []pathToRegexp.Token
 	router       *Router
 }
 
 func (n *node) initRegexp() {
+	var options *pathToRegexp.Options
+	if n.router.routerOption != nil {
+		options = n.router.routerOption.toPathToRegexpOption()
+	}
 	n.regexp = pathToRegexp.Must(pathToRegexp.PathToRegexp(
-		n.route, &n.tokens, n.options))
+		n.route, &n.tokens, options))
 }
 
 func (n *node) buildRequestParams(c *Context, urlPath string) {
@@ -64,18 +67,25 @@ func (n *node) isErrorHandler() bool {
 	return n.errorHandle != nil
 }
 
-// Router is a http.Handler which can be used to dispatch requests to
-// different handler functions.
-type Router struct {
-	routes []*node
-
+// RouterOption contains options for router, such as `Sensitive` and `Strict`
+type RouterOption struct {
 	// When true the regexp will be case sensitive. (default: false)
 	Sensitive bool
 
 	// When true the regexp won't allow an optional trailing delimiter to match. (default: false)
 	Strict bool
+}
 
-	options *pathToRegexp.Options
+func (o *RouterOption) toPathToRegexpOption() *pathToRegexp.Options {
+	return &pathToRegexp.Options{Sensitive: o.Sensitive, Strict: o.Strict}
+}
+
+// Router is a http.Handler which can be used to dispatch requests to
+// different handler functions.
+type Router struct {
+	routes []*node
+
+	routerOption *RouterOption
 
 	paramHandles map[string][]paramHandle
 }
@@ -104,17 +114,12 @@ func defaultErrorHandler(v interface{}, c *Context) {
 
 // NewRouter returns a new initialized Router with default configuration.
 // Sensitive and Strict is false by default.
-func NewRouter() *Router {
-	return &Router{paramHandles: make(map[string][]paramHandle, 0)}
-}
-
-func (r *Router) initOptions() {
-	if r.options == nil {
-		r.options = &pathToRegexp.Options{
-			Sensitive: r.Sensitive,
-			Strict:    r.Strict,
-		}
+func NewRouter(options ...*RouterOption) *Router {
+	router := &Router{paramHandles: make(map[string][]paramHandle, 0)}
+	if len(options) > 0 {
+		router.routerOption = options[0]
 	}
+	return router
 }
 
 func (r *Router) recv(c *Context) {
@@ -167,13 +172,11 @@ func (r *Router) Use(params ...interface{}) {
 }
 
 func (r *Router) useMiddleware(route string, h Handle) {
-	r.initOptions()
 	route = util.RouteJoin(route, "/(.*)")
 	node := &node{
 		route:        route,
 		isMiddleware: true,
 		handle:       h,
-		options:      r.options,
 		router:       r,
 	}
 	node.initRegexp()
@@ -181,12 +184,10 @@ func (r *Router) useMiddleware(route string, h Handle) {
 }
 
 func (r *Router) useErrorHandle(route string, h ErrorHandle) {
-	r.initOptions()
 	route = util.RouteJoin(route, "/(.*)")
 	node := &node{
 		route:       route,
 		errorHandle: h,
-		options:     r.options,
 		router:      r,
 	}
 	node.initRegexp()
@@ -194,6 +195,10 @@ func (r *Router) useErrorHandle(route string, h ErrorHandle) {
 }
 
 func (r *Router) mount(mountPoint string, router *Router) {
+	if router.routerOption == nil {
+		router.routerOption = r.routerOption
+	}
+
 	for _, v := range router.routes {
 		route := util.RouteJoin(mountPoint, v.route)
 		route = util.AddPrefixSlash(strings.TrimSuffix(route, "/"))
@@ -203,8 +208,7 @@ func (r *Router) mount(mountPoint string, router *Router) {
 			isMiddleware: v.isMiddleware,
 			handle:       v.handle,
 			errorHandle:  v.errorHandle,
-			options:      v.options,
-			router:       router,
+			router:       v.router,
 		}
 		node.initRegexp()
 		r.routes = append(r.routes, node)
@@ -255,13 +259,11 @@ func (r *Router) ALL(route string, handle Handle) {
 // Handle registers the handler for the http request which matched the method
 // and route, and dispatch a context object into the handler.
 func (r *Router) Handle(method, route string, handle Handle) {
-	r.initOptions()
 	node := &node{
 		method:       method,
 		route:        util.AddPrefixSlash(strings.TrimSuffix(route, "/")),
 		isMiddleware: false,
 		handle:       handle,
-		options:      r.options,
 		router:       r,
 	}
 	node.initRegexp()

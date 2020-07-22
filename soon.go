@@ -14,8 +14,8 @@ type App struct {
 }
 
 // New creates a Soon application.
-func New() *App {
-	return &App{Router: NewRouter()}
+func New(options ...*RouterOption) *App {
+	return &App{Router: NewRouter(options...)}
 }
 
 // Run attaches the router to a http.Server and starts listening and serving HTTP requests.
