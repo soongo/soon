@@ -25,14 +25,16 @@ type paramHandle func(*Request, string)
 type ErrorHandle func(interface{}, *Context)
 
 type node struct {
-	method       string
-	route        string
-	regexp       *regexp2.Regexp
-	isMiddleware bool
-	handle       Handle
-	errorHandle  ErrorHandle
-	tokens       []pathToRegexp.Token
-	router       *Router
+	method         string
+	route          string
+	originalRoute  string
+	regexp         *regexp2.Regexp
+	isMiddleware   bool
+	handle         Handle
+	errorHandle    ErrorHandle
+	tokens         []pathToRegexp.Token
+	originalTokens []pathToRegexp.Token
+	router         *Router
 }
 
 func (n *node) initRegexp() {
@@ -40,18 +42,19 @@ func (n *node) initRegexp() {
 	if n.router.routerOption != nil {
 		options = n.router.routerOption.toPathToRegexpOption()
 	}
-	n.regexp = pathToRegexp.Must(pathToRegexp.PathToRegexp(
-		n.route, &n.tokens, options))
+	n.regexp = pathToRegexp.Must(pathToRegexp.PathToRegexp(n.route, &n.tokens, options))
+	pathToRegexp.Must(pathToRegexp.PathToRegexp(n.originalRoute, &n.originalTokens, options))
 }
 
 func (n *node) buildRequestParams(c *Context, urlPath string) {
 	c.Request.resetParams()
-	if len(n.tokens) > 0 {
+	if len(n.originalTokens) > 0 {
 		match, err := n.regexp.FindStringMatch(urlPath)
 		if err == nil {
+			nGroup, nToken := len(match.Groups()), len(n.originalTokens)
 			for i, g := range match.Groups() {
-				if i > 0 {
-					c.Request.Params.Set(n.tokens[i-1].Name, g.String())
+				if i > 0 && i >= nGroup-nToken {
+					c.Request.Params.Set(n.originalTokens[i-nGroup+nToken].Name, g.String())
 				}
 			}
 		}
@@ -174,10 +177,11 @@ func (r *Router) Use(params ...interface{}) {
 func (r *Router) useMiddleware(route string, h Handle) {
 	route = util.RouteJoin(route, "/(.*)")
 	node := &node{
-		route:        route,
-		isMiddleware: true,
-		handle:       h,
-		router:       r,
+		route:         route,
+		originalRoute: route,
+		isMiddleware:  true,
+		handle:        h,
+		router:        r,
 	}
 	node.initRegexp()
 	r.routes = append(r.routes, node)
@@ -186,9 +190,10 @@ func (r *Router) useMiddleware(route string, h Handle) {
 func (r *Router) useErrorHandle(route string, h ErrorHandle) {
 	route = util.RouteJoin(route, "/(.*)")
 	node := &node{
-		route:       route,
-		errorHandle: h,
-		router:      r,
+		route:         route,
+		originalRoute: route,
+		errorHandle:   h,
+		router:        r,
 	}
 	node.initRegexp()
 	r.routes = append(r.routes, node)
@@ -203,12 +208,13 @@ func (r *Router) mount(mountPoint string, router *Router) {
 		route := util.RouteJoin(mountPoint, v.route)
 		route = util.AddPrefixSlash(strings.TrimSuffix(route, "/"))
 		node := &node{
-			method:       v.method,
-			route:        route,
-			isMiddleware: v.isMiddleware,
-			handle:       v.handle,
-			errorHandle:  v.errorHandle,
-			router:       v.router,
+			method:        v.method,
+			route:         route,
+			originalRoute: v.originalRoute,
+			isMiddleware:  v.isMiddleware,
+			handle:        v.handle,
+			errorHandle:   v.errorHandle,
+			router:        v.router,
 		}
 		node.initRegexp()
 		r.routes = append(r.routes, node)
@@ -259,12 +265,14 @@ func (r *Router) ALL(route string, handle Handle) {
 // Handle registers the handler for the http request which matched the method
 // and route, and dispatch a context object into the handler.
 func (r *Router) Handle(method, route string, handle Handle) {
+	route = util.AddPrefixSlash(strings.TrimSuffix(route, "/"))
 	node := &node{
-		method:       method,
-		route:        util.AddPrefixSlash(strings.TrimSuffix(route, "/")),
-		isMiddleware: false,
-		handle:       handle,
-		router:       r,
+		method:        method,
+		route:         route,
+		originalRoute: route,
+		isMiddleware:  false,
+		handle:        handle,
+		router:        r,
 	}
 	node.initRegexp()
 	r.routes = append(r.routes, node)

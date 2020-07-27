@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -440,6 +441,216 @@ func TestRouterMiddleware(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRouter_Params(t *testing.T) {
+	tests := []struct {
+		route1            string
+		route2            string
+		route3            string
+		path1             string
+		path2             string
+		path3             string
+		params1           Params
+		params2           Params
+		params3           Params
+		middlewareParams1 Params
+		middlewareParams2 Params
+		middlewareParams3 Params
+	}{
+		{
+			"/:foo",
+			"/:bar",
+			"/(.*)",
+			"/foo",
+			"/foo/bar",
+			"/foo/bar/test",
+			Params{"foo": "foo"},
+			Params{"bar": "bar"},
+			Params{0: "test"},
+			Params{"foo": "foo", 0: ""},
+			Params{"bar": "bar", 0: ""},
+			Params{0: "test", 1: ""},
+		},
+		//{
+		//	"/:foo",
+		//	"/([^/]*)",
+		//	"/(.*)",
+		//	"/foo",
+		//	"/foo/bar",
+		//	"/foo/bar/test",
+		//	Params{"foo": "foo"},
+		//	Params{0: "bar"},
+		//	Params{0: "test"},
+		//	Params{"foo": "foo", 0: ""},
+		//	Params{0: "bar", 1: ""},
+		//	Params{0: "test", 1: ""},
+		//},
+	}
+
+	for _, tt := range tests {
+		t.Run("", func(t *testing.T) {
+			router1 := NewRouter()
+			router1.Use(tt.route1, func(c *Context) {
+				if c.Request.URL.Path == tt.path1 {
+					if !reflect.DeepEqual(c.Params(), tt.middlewareParams1) {
+						t.Errorf(testErrorFormat, c.Params(), tt.middlewareParams1)
+					}
+				}
+				c.Next()
+			})
+			router1.GET(tt.route1, func(c *Context) {
+				if !reflect.DeepEqual(c.Params(), tt.params1) {
+					t.Errorf(testErrorFormat, c.Params(), tt.params1)
+				}
+				c.String(body200)
+			})
+			router2 := NewRouter()
+			router2.Use(tt.route2, func(c *Context) {
+				if c.Request.URL.Path == tt.path2 {
+					if !reflect.DeepEqual(c.Params(), tt.middlewareParams2) {
+						t.Errorf(testErrorFormat, c.Params(), tt.middlewareParams2)
+					}
+				}
+				c.Next()
+			})
+			router2.GET(tt.route2, func(c *Context) {
+				if !reflect.DeepEqual(c.Params(), tt.params2) {
+					t.Errorf(testErrorFormat, c.Params(), tt.params2)
+				}
+				c.String(body200)
+			})
+			router3 := NewRouter()
+			router3.Use(tt.route3, func(c *Context) {
+				if c.Request.URL.Path == tt.path3 {
+					if !reflect.DeepEqual(c.Params(), tt.middlewareParams3) {
+						t.Errorf(testErrorFormat, c.Params(), tt.middlewareParams3)
+					}
+				}
+				c.Next()
+			})
+			router3.Use(func(c *Context) {
+				if !reflect.DeepEqual(c.Params(), tt.params3) {
+					t.Errorf(testErrorFormat, c.Params(), tt.params3)
+				}
+				c.Next()
+			})
+			router3.GET(tt.route3, func(c *Context) {
+				if !reflect.DeepEqual(c.Params(), tt.params3) {
+					t.Errorf(testErrorFormat, c.Params(), tt.params3)
+				}
+				c.String(body200)
+			})
+			router2.Use(tt.route2, router3)
+			router1.Use(tt.route1, router2)
+			router1.Use(func(v interface{}, c *Context) {
+				if v != nil {
+					t.Errorf(testErrorFormat, v, nil)
+				}
+			})
+			server := httptest.NewServer(router1)
+			defer server.Close()
+
+			statusCode, _, _, err := request("GET", server.URL+tt.path1, nil)
+			if err != nil {
+				t.Error(err)
+			}
+			if statusCode != 200 {
+				t.Errorf(testErrorFormat, statusCode, 200)
+			}
+
+			statusCode, _, _, err = request("GET", server.URL+tt.path2, nil)
+			if err != nil {
+				t.Error(err)
+			}
+			if statusCode != 200 {
+				t.Errorf(testErrorFormat, statusCode, 200)
+			}
+
+			statusCode, _, _, err = request("GET", server.URL+tt.path3, nil)
+			if err != nil {
+				t.Error(err)
+			}
+			if statusCode != 200 {
+				t.Errorf(testErrorFormat, statusCode, 200)
+			}
+		})
+	}
+
+	t.Run("panic", func(t *testing.T) {
+		for _, tt := range tests {
+			t.Run("", func(t *testing.T) {
+				router1 := NewRouter()
+				router1.GET(tt.route1, func(c *Context) {
+					panic("error")
+				})
+				router2 := NewRouter()
+				router2.GET(tt.route2, func(c *Context) {
+					panic("error")
+				})
+				router2.Use(tt.route2, func(v interface{}, c *Context) {
+					if v == nil {
+						t.Errorf(testErrorFormat, v, "none nil")
+					}
+					if !reflect.DeepEqual(c.Params(), tt.middlewareParams2) {
+						t.Errorf(testErrorFormat, c.Params(), tt.middlewareParams2)
+					}
+					c.SendStatus(500)
+				})
+				router3 := NewRouter()
+				router3.GET(tt.route3, func(c *Context) {
+					panic("error")
+				})
+				router3.Use(tt.route3, func(v interface{}, c *Context) {
+					if v == nil {
+						t.Errorf(testErrorFormat, v, "none nil")
+					}
+					if !reflect.DeepEqual(c.Params(), tt.middlewareParams3) {
+						t.Errorf(testErrorFormat, c.Params(), tt.middlewareParams3)
+					}
+					c.SendStatus(500)
+				})
+				router2.Use(tt.route2, router3)
+				router1.Use(tt.route1, router2)
+				router1.Use(tt.route1, func(v interface{}, c *Context) {
+					if v == nil {
+						t.Errorf(testErrorFormat, v, "none nil")
+					}
+					if !reflect.DeepEqual(c.Params(), tt.middlewareParams1) {
+						t.Errorf(testErrorFormat, c.Params(), tt.middlewareParams1)
+					}
+					c.SendStatus(500)
+				})
+
+				server := httptest.NewServer(router1)
+				defer server.Close()
+
+				statusCode, _, _, err := request("GET", server.URL+tt.path1, nil)
+				if err != nil {
+					t.Error(err)
+				}
+				if statusCode != 500 {
+					t.Errorf(testErrorFormat, statusCode, 500)
+				}
+
+				statusCode, _, _, err = request("GET", server.URL+tt.path2, nil)
+				if err != nil {
+					t.Error(err)
+				}
+				if statusCode != 500 {
+					t.Errorf(testErrorFormat, statusCode, 500)
+				}
+
+				statusCode, _, _, err = request("GET", server.URL+tt.path3, nil)
+				if err != nil {
+					t.Error(err)
+				}
+				if statusCode != 500 {
+					t.Errorf(testErrorFormat, statusCode, 500)
+				}
+			})
+		}
+	})
 }
 
 func TestRouterMethods(t *testing.T) {
