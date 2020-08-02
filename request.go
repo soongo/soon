@@ -62,11 +62,17 @@ type Request struct {
 	// This property is useful for exposing request-level information such as
 	// the request path name, authenticated user, user settings, and so on.
 	Locals Locals
+
+	// BaseUrl is the URL path on which a router instance was mounted.
+	//
+	// Even if you use a path pattern to load the router,
+	// the baseUrl property returns the matched string, not the pattern(s).
+	BaseUrl string
 }
 
 // NewRequest returns an instance of Request object
 func NewRequest(req *http.Request) *Request {
-	return &Request{req, make(Params, 0), make(Locals, 0)}
+	return &Request{req, make(Params, 0), make(Locals, 0), ""}
 }
 
 // Accepts checks if the specified content types are acceptable, based on the

@@ -204,3 +204,74 @@ func TestRequest_ResetParams(t *testing.T) {
 		}
 	}
 }
+
+func TestRequest_BaseUrl(t *testing.T) {
+	tests := []struct {
+		route0          string
+		route1          string
+		route2          string
+		expectedBaseUrl string
+		path            string
+	}{
+		{"/", "", "", "", "/"},
+		{"/foo", "/bar", "", "/foo", "/foo/bar"},
+		{"/foo", "/bar", "/test", "/foo/bar", "/foo/bar/test"},
+		{"/:foo", "/:bar", "", "/foo", "/foo/bar"},
+		{"/:foo", "/:bar", "/:test", "/foo/bar", "/foo/bar/test"},
+	}
+
+	for _, tt := range tests {
+		t.Run("", func(t *testing.T) {
+			router0 := NewRouter()
+			if tt.route1 != "" {
+				router1 := NewRouter()
+				if tt.route2 != "" {
+					router2 := NewRouter()
+					router2.Use(tt.route2, func(c *Context) {
+						if got := c.Request.BaseUrl; got != tt.expectedBaseUrl {
+							t.Errorf(testErrorFormat, got, tt.expectedBaseUrl)
+						}
+						c.Next()
+					})
+					router2.GET(tt.route2, func(c *Context) {
+						if got := c.Request.BaseUrl; got != tt.expectedBaseUrl {
+							t.Errorf(testErrorFormat, got, tt.expectedBaseUrl)
+						}
+					})
+					router1.Use(tt.route1, router2)
+				} else {
+					router1.Use(tt.route1, func(c *Context) {
+						if got := c.Request.BaseUrl; got != tt.expectedBaseUrl {
+							t.Errorf(testErrorFormat, got, tt.expectedBaseUrl)
+						}
+						c.Next()
+					})
+					router1.GET(tt.route1, func(c *Context) {
+						if got := c.Request.BaseUrl; got != tt.expectedBaseUrl {
+							t.Errorf(testErrorFormat, got, tt.expectedBaseUrl)
+						}
+					})
+				}
+				router0.Use(tt.route0, router1)
+			} else {
+				router0.Use(tt.route0, func(c *Context) {
+					if got := c.Request.BaseUrl; got != tt.expectedBaseUrl {
+						t.Errorf(testErrorFormat, got, tt.expectedBaseUrl)
+					}
+					c.Next()
+				})
+				router0.GET(tt.route0, func(c *Context) {
+					if got := c.Request.BaseUrl; got != tt.expectedBaseUrl {
+						t.Errorf(testErrorFormat, got, tt.expectedBaseUrl)
+					}
+				})
+			}
+			server := httptest.NewServer(router0)
+			defer server.Close()
+			_, _, _, err := request("GET", server.URL+tt.path, nil)
+			if err != nil {
+				t.Error(err)
+			}
+		})
+	}
+}

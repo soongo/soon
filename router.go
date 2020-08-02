@@ -29,6 +29,7 @@ type node struct {
 	route          string
 	originalRoute  string
 	regexp         *regexp2.Regexp
+	baseUrlRegexp  *regexp2.Regexp
 	isMiddleware   bool
 	handle         Handle
 	errorHandle    ErrorHandle
@@ -43,20 +44,36 @@ func (n *node) initRegexp() {
 		options = n.router.routerOption.toPathToRegexpOption()
 	}
 	n.regexp = pathToRegexp.Must(pathToRegexp.PathToRegexp(n.route, &n.tokens, options))
+	baseUrlRoute := strings.TrimSuffix(n.route, n.originalRoute)
+	if baseUrlRoute != "" {
+		n.baseUrlRegexp = pathToRegexp.Must(pathToRegexp.PathToRegexp(baseUrlRoute, nil, options))
+		ro := regexp2.None
+		if options == nil || !options.Sensitive {
+			ro = regexp2.IgnoreCase
+		}
+		route := "(" + strings.TrimSuffix(n.baseUrlRegexp.String(), "$") + ")/(.*)"
+		n.baseUrlRegexp = regexp2.MustCompile(route, ro)
+	}
 	pathToRegexp.Must(pathToRegexp.PathToRegexp(n.originalRoute, &n.originalTokens, options))
 }
 
-func (n *node) buildRequestParams(c *Context, urlPath string) {
+func (n *node) buildRequestProperties(c *Context, urlPath string) {
 	c.Request.resetParams()
-	if len(n.originalTokens) > 0 {
-		match, err := n.regexp.FindStringMatch(urlPath)
-		if err == nil {
-			nGroup, nToken := len(match.Groups()), len(n.originalTokens)
-			for i, g := range match.Groups() {
-				if i > 0 && i >= nGroup-nToken {
-					c.Request.Params.Set(n.originalTokens[i-nGroup+nToken].Name, g.String())
-				}
+	match, err := n.regexp.FindStringMatch(urlPath)
+	if err == nil && match != nil && len(n.originalTokens) > 0 {
+		nGroup, nToken := match.GroupCount(), len(n.originalTokens)
+		for i, g := range match.Groups() {
+			if i > 0 && i >= nGroup-nToken {
+				c.Request.Params.Set(n.originalTokens[i-nGroup+nToken].Name, g.String())
 			}
+		}
+	}
+
+	c.Request.BaseUrl = ""
+	if n.baseUrlRegexp != nil {
+		baseUrlMatch, err := n.baseUrlRegexp.FindStringMatch(urlPath)
+		if err == nil && baseUrlMatch != nil && baseUrlMatch.GroupCount() > 1 {
+			c.Request.BaseUrl = baseUrlMatch.GroupByNumber(1).String()
 		}
 	}
 }
@@ -317,7 +334,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		if match {
 			if len(v) > 0 && v[0] != nil {
 				if isErrorHandler {
-					node.buildRequestParams(c, urlPath)
+					node.buildRequestProperties(c, urlPath)
 					node.errorHandle(v[0], c)
 					return
 				}
@@ -326,7 +343,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			}
 
 			if node.isMiddleware || node.method == HTTPMethodAll || node.method == req.Method {
-				node.buildRequestParams(c, urlPath)
+				node.buildRequestProperties(c, urlPath)
 
 				if len(node.router.paramHandles) > 0 {
 					for n, handles := range node.router.paramHandles {
