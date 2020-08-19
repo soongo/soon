@@ -6,6 +6,8 @@ package soon
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestApp_Run(t *testing.T) {
@@ -19,13 +21,8 @@ func TestApp_Run(t *testing.T) {
 		c.Send("hello")
 	})
 	statusCode, _, body, err := request("GET", "http://localhost:54321", nil)
-	if err != nil {
-		t.Error(err)
-	}
-	if statusCode != 200 {
-		t.Errorf(testErrorFormat, statusCode, 200)
-	}
-	if body != "hello" {
-		t.Errorf(testErrorFormat, body, "hello")
-	}
+	assert := assert.New(t)
+	assert.Nil(err)
+	assert.Equal(200, statusCode)
+	assert.Equal("hello", body)
 }

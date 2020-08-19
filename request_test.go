@@ -7,8 +7,9 @@ package soon
 import (
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/soongo/negotiator"
 )
@@ -25,9 +26,7 @@ func TestParams_Get(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		if got := tt.p.Get(tt.k); got != tt.expected {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, tt.p.Get(tt.k))
 	}
 }
 
@@ -45,9 +44,7 @@ func TestParams_Set(t *testing.T) {
 
 	for _, tt := range tests {
 		tt.p.Set(tt.k, tt.v)
-		if got := tt.p.Get(tt.k); got != tt.expected {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, tt.p.Get(tt.k))
 	}
 }
 
@@ -60,13 +57,11 @@ func TestParams_MarshalJSON(t *testing.T) {
 		{Params{"name": "foo", 0: "bar"}, `{"0":"bar","name":"foo"}`},
 	}
 
+	assert := assert.New(t)
 	for _, tt := range tests {
 		bts, err := tt.p.MarshalJSON()
-		if err != nil {
-			t.Error(err)
-		} else if got := string(bts); got != tt.expected {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Nil(err)
+		assert.Equal(tt.expected, string(bts))
 	}
 }
 
@@ -94,9 +89,7 @@ func TestRequest_Accepts(t *testing.T) {
 	req := NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	for _, tt := range tests {
 		req.Header = http.Header{negotiator.HeaderAccept: tt.accept}
-		if got := req.Accepts(tt.types...); !reflect.DeepEqual(got, tt.expected) {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, req.Accepts(tt.types...))
 	}
 }
 
@@ -123,9 +116,7 @@ func TestRequest_AcceptsEncodings(t *testing.T) {
 	req := NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	for _, tt := range tests {
 		req.Header = http.Header{negotiator.HeaderAcceptEncoding: dotRegexp.Split(tt.accept, -1)}
-		if got := req.AcceptsEncodings(tt.encodings...); !reflect.DeepEqual(got, tt.expected) {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, req.AcceptsEncodings(tt.encodings...))
 	}
 }
 
@@ -151,9 +142,7 @@ func TestRequest_AcceptsCharsets(t *testing.T) {
 	req := NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	for _, tt := range tests {
 		req.Header = http.Header{negotiator.HeaderAcceptCharset: dotRegexp.Split(tt.accept, -1)}
-		if got := req.AcceptsCharsets(tt.charsets...); !reflect.DeepEqual(got, tt.expected) {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, req.AcceptsCharsets(tt.charsets...))
 	}
 }
 
@@ -179,9 +168,7 @@ func TestRequest_AcceptsLanguages(t *testing.T) {
 	req := NewRequest(httptest.NewRequest(http.MethodGet, "/", nil))
 	for _, tt := range tests {
 		req.Header = http.Header{negotiator.HeaderAcceptLanguage: dotRegexp.Split(tt.accept, -1)}
-		if got := req.AcceptsLanguages(tt.languages...); !reflect.DeepEqual(got, tt.expected) {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, req.AcceptsLanguages(tt.languages...))
 	}
 }
 
@@ -199,9 +186,7 @@ func TestRequest_ResetParams(t *testing.T) {
 		req := NewRequest(httptest.NewRequest("GET", "/", nil))
 		req.Params = tt.p
 		req.resetParams()
-		if got := req.Params; !reflect.DeepEqual(got, tt.expected) {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, req.Params)
 	}
 }
 
@@ -222,56 +207,43 @@ func TestRequest_BaseUrl(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
+			assert := assert.New(t)
 			router0 := NewRouter()
 			if tt.route1 != "" {
 				router1 := NewRouter()
 				if tt.route2 != "" {
 					router2 := NewRouter()
 					router2.Use(tt.route2, func(c *Context) {
-						if got := c.Request.BaseUrl; got != tt.expectedBaseUrl {
-							t.Errorf(testErrorFormat, got, tt.expectedBaseUrl)
-						}
+						assert.Equal(tt.expectedBaseUrl, c.Request.BaseUrl)
 						c.Next()
 					})
 					router2.GET(tt.route2, func(c *Context) {
-						if got := c.Request.BaseUrl; got != tt.expectedBaseUrl {
-							t.Errorf(testErrorFormat, got, tt.expectedBaseUrl)
-						}
+						assert.Equal(tt.expectedBaseUrl, c.Request.BaseUrl)
 					})
 					router1.Use(tt.route1, router2)
 				} else {
 					router1.Use(tt.route1, func(c *Context) {
-						if got := c.Request.BaseUrl; got != tt.expectedBaseUrl {
-							t.Errorf(testErrorFormat, got, tt.expectedBaseUrl)
-						}
+						assert.Equal(tt.expectedBaseUrl, c.Request.BaseUrl)
 						c.Next()
 					})
 					router1.GET(tt.route1, func(c *Context) {
-						if got := c.Request.BaseUrl; got != tt.expectedBaseUrl {
-							t.Errorf(testErrorFormat, got, tt.expectedBaseUrl)
-						}
+						assert.Equal(tt.expectedBaseUrl, c.Request.BaseUrl)
 					})
 				}
 				router0.Use(tt.route0, router1)
 			} else {
 				router0.Use(tt.route0, func(c *Context) {
-					if got := c.Request.BaseUrl; got != tt.expectedBaseUrl {
-						t.Errorf(testErrorFormat, got, tt.expectedBaseUrl)
-					}
+					assert.Equal(tt.expectedBaseUrl, c.Request.BaseUrl)
 					c.Next()
 				})
 				router0.GET(tt.route0, func(c *Context) {
-					if got := c.Request.BaseUrl; got != tt.expectedBaseUrl {
-						t.Errorf(testErrorFormat, got, tt.expectedBaseUrl)
-					}
+					assert.Equal(tt.expectedBaseUrl, c.Request.BaseUrl)
 				})
 			}
 			server := httptest.NewServer(router0)
 			defer server.Close()
 			_, _, _, err := request("GET", server.URL+tt.path, nil)
-			if err != nil {
-				t.Error(err)
-			}
+			assert.Nil(err)
 		})
 	}
 }

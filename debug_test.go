@@ -11,6 +11,8 @@ import (
 	"os"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestIsDebugging(t *testing.T) {
@@ -25,9 +27,7 @@ func TestIsDebugging(t *testing.T) {
 
 	for _, tt := range tests {
 		SetMode(tt.mode)
-		if got := IsDebugging(); got != tt.expected {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, IsDebugging())
 	}
 }
 
@@ -43,9 +43,7 @@ func TestDebugPrint(t *testing.T) {
 		SetMode(TestMode)
 	})
 	expected := "[SOON-debug] these are 2 error messages\n"
-	if got != expected {
-		t.Errorf(testErrorFormat, got, expected)
-	}
+	assert.Equal(t, expected, got)
 }
 
 func captureOutput(t *testing.T, f func()) string {
@@ -70,9 +68,7 @@ func captureOutput(t *testing.T, f func()) string {
 		var buf bytes.Buffer
 		wg.Done()
 		_, err := io.Copy(&buf, reader)
-		if err != nil {
-			t.Error(testErrorFormat, err, "nil")
-		}
+		assert.Nil(t, err)
 		out <- buf.String()
 	}()
 	wg.Wait()

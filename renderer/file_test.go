@@ -13,15 +13,15 @@ import (
 	"path"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestFile_RenderHeader(t *testing.T) {
 	w := httptest.NewRecorder()
 	renderer := File{"", nil}
 	renderer.RenderHeader(w, nil)
-	if got := w.Header().Get("Content-Type"); got != "" {
-		t.Errorf(testErrorFormat, got, "")
-	}
+	assert.Equal(t, "", w.Header().Get("Content-Type"))
 }
 
 func TestFile_Render(t *testing.T) {
@@ -29,7 +29,6 @@ func TestFile_Render(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(pwd)
 
 	maxAge := time.Hour
 	tests := []struct {
@@ -109,56 +108,37 @@ func TestFile_Render(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			assert := assert.New(t)
 			renderer := File{tt.filePath, tt.options}
 			w := httptest.NewRecorder()
 			err := renderer.Render(w, nil)
 			if tt.expectedError != nil {
-				if err == nil {
-					t.Errorf(testErrorFormat, err, "none nil error")
-				}
-				if got := w.Code; got != tt.expectedStatus {
-					t.Errorf(testErrorFormat, got, tt.expectedContentType)
-				}
-				if got := w.Body.String(); got != "" {
-					t.Errorf(testErrorFormat, got, "")
-				}
+				assert.NotNil(err)
+				assert.Equal(tt.expectedStatus, w.Code)
+				assert.Equal("", w.Body.String())
 			} else {
 				fileInfo, fileContent := getFileContent(tt.filePath)
 				lastModified := fileInfo.ModTime().UTC().Format(timeFormat)
-				if got := w.Code; got != tt.expectedStatus {
-					t.Errorf(testErrorFormat, got, tt.expectedContentType)
-				}
-				if got := w.Body.String(); got != fileContent {
-					t.Errorf(testErrorFormat, got, fileContent)
-				}
-				if got := w.Header().Get("Content-Type"); got != tt.expectedContentType {
-					t.Errorf(testErrorFormat, got, tt.expectedContentType)
-				}
+				assert.Equal(tt.expectedStatus, w.Code)
+				assert.Equal(fileContent, w.Body.String())
+				assert.Equal(tt.expectedContentType, w.Header().Get("Content-Type"))
 				if tt.options != nil {
 					if tt.options.MaxAge != nil {
 						cc := fmt.Sprintf("max-age=%.0f", maxAge.Seconds())
-						if got := w.Header().Get("Cache-Control"); got != cc {
-							t.Errorf(testErrorFormat, got, cc)
-						}
+						assert.Equal(cc, w.Header().Get("Cache-Control"))
 					}
 					if tt.options.Header != nil {
 						for k, v := range tt.options.Header {
-							if got := w.Header().Get(k); got != v {
-								t.Errorf(testErrorFormat, got, v)
-							}
+							assert.Equal(v, w.Header().Get(k))
 						}
 					}
 					expectedLastModified := lastModified
 					if tt.options.LastModifiedDisabled {
 						expectedLastModified = ""
 					}
-					if got := w.Header().Get("Last-Modified"); got != expectedLastModified {
-						t.Errorf(testErrorFormat, got, expectedLastModified)
-					}
+					assert.Equal(expectedLastModified, w.Header().Get("Last-Modified"))
 				} else {
-					if got := w.Header().Get("Last-Modified"); got != lastModified {
-						t.Errorf(testErrorFormat, got, lastModified)
-					}
+					assert.Equal(lastModified, w.Header().Get("Last-Modified"))
 				}
 			}
 		})

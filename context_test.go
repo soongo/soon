@@ -5,7 +5,6 @@
 package soon
 
 import (
-	"bytes"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -13,13 +12,13 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"reflect"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/soongo/soon/util"
 
@@ -27,13 +26,12 @@ import (
 )
 
 var (
-	testErrorFormat = "got `%v`, expect `%v`"
-	timeFormat      = http.TimeFormat
-	dotRegexp       = regexp.MustCompile("\\s*,\\s*")
-	plainType       = "text/plain; charset=UTF-8"
-	htmlType        = "text/html; charset=UTF-8"
-	jsonType        = "application/json; charset=UTF-8"
-	jsonpType       = "text/javascript; charset=UTF-8"
+	timeFormat = http.TimeFormat
+	dotRegexp  = regexp.MustCompile("\\s*,\\s*")
+	plainType  = "text/plain; charset=UTF-8"
+	htmlType   = "text/html; charset=UTF-8"
+	jsonType   = "application/json; charset=UTF-8"
+	jsonpType  = "text/javascript; charset=UTF-8"
 )
 
 func TestContext_HeadersSent(t *testing.T) {
@@ -64,9 +62,7 @@ func TestContext_HeadersSent(t *testing.T) {
 	for _, tt := range tests {
 		c := NewContext(nil, httptest.NewRecorder())
 		tt.handle(c)
-		if got := c.HeadersSent(); got != tt.expected {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, c.HeadersSent())
 	}
 }
 
@@ -85,9 +81,7 @@ func TestContext_Locals(t *testing.T) {
 	for _, tt := range tests {
 		c := NewContext(nil, httptest.NewRecorder())
 		c.Locals().Set(tt.k, tt.v)
-		if got := c.Locals().Get(tt.k); !reflect.DeepEqual(got, tt.v) {
-			t.Errorf(testErrorFormat, got, tt.v)
-		}
+		assert.Equal(t, tt.v, c.Locals().Get(tt.k))
 	}
 }
 
@@ -105,9 +99,7 @@ func TestContext_Params(t *testing.T) {
 		for k, v := range tt.params {
 			c.Request.Params.Set(k, v)
 		}
-		if got := c.Params(); !reflect.DeepEqual(got, tt.params) {
-			t.Errorf(testErrorFormat, got, tt.params)
-		}
+		assert.Equal(t, tt.params, c.Params())
 	}
 }
 
@@ -129,9 +121,7 @@ func TestContext_Query(t *testing.T) {
 	for _, tt := range tests {
 		req := httptest.NewRequest("GET", "/?"+tt.q, nil)
 		c := NewContext(req, nil)
-		if got := c.Query(); !reflect.DeepEqual(got, tt.expected) {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, c.Query())
 	}
 }
 
@@ -164,9 +154,7 @@ func TestContext_Append(t *testing.T) {
 	for _, tt := range tests {
 		c := NewContext(nil, httptest.NewRecorder())
 		c.Append(tt.k, tt.v)
-		if got := c.Writer.Header()[tt.k]; !reflect.DeepEqual(got, tt.expected) {
-			t.Errorf(testErrorFormat, got, tt.v)
-		}
+		assert.Equal(t, tt.expected, c.Writer.Header()[tt.k])
 	}
 }
 
@@ -216,9 +204,7 @@ func TestContext_Set(t *testing.T) {
 		} else {
 			c.Set(tt.k, tt.v)
 		}
-		if got := c.Writer.Header(); !reflect.DeepEqual(got, tt.expected) {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, c.Writer.Header())
 	}
 }
 
@@ -234,15 +220,12 @@ func TestContext_Get(t *testing.T) {
 		{"Content-Type", []string{"text/*", "application/json"}, "text/*; charset=UTF-8"},
 	}
 
+	assert := assert.New(t)
 	for _, tt := range tests {
 		c := NewContext(nil, httptest.NewRecorder())
-		if got := c.Get(tt.k); got != "" {
-			t.Errorf(testErrorFormat, got, "")
-		}
+		assert.Equal("", c.Get(tt.k))
 		c.Set(tt.k, tt.v)
-		if got := c.Get(tt.k); got != tt.expected {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(tt.expected, c.Get(tt.k))
 	}
 }
 
@@ -263,10 +246,7 @@ func TestContext_Vary(t *testing.T) {
 		c := NewContext(nil, httptest.NewRecorder())
 		c.Set(key, tt.vary)
 		c.Vary(tt.fields...)
-		result := c.Get(key)
-		if result != tt.expected {
-			t.Errorf(testErrorFormat, result, tt.expected)
-		}
+		assert.Equal(t, tt.expected, c.Get(key))
 	}
 }
 
@@ -280,19 +260,15 @@ func TestContext_Status(t *testing.T) {
 		{500},
 	}
 
+	assert := assert.New(t)
 	for _, tt := range tests {
 		c := NewContext(nil, httptest.NewRecorder())
 		c.Status(tt.code)
-
-		if got := c.Writer.Status(); got != tt.code {
-			t.Errorf(testErrorFormat, got, tt.code)
-		}
+		assert.Equal(tt.code, c.Writer.Status())
 
 		c.Writer.Flush()
 		w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
-		if got := w.Code; got != tt.code {
-			t.Errorf(testErrorFormat, got, tt.code)
-		}
+		assert.Equal(tt.code, w.Code)
 	}
 }
 
@@ -306,16 +282,13 @@ func TestContext_SendStatus(t *testing.T) {
 		{500},
 	}
 
+	assert := assert.New(t)
 	for _, tt := range tests {
 		c := NewContext(nil, httptest.NewRecorder())
 		c.SendStatus(tt.code)
 		w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
-		if got := w.Code; got != tt.code {
-			t.Errorf(testErrorFormat, got, tt.code)
-		}
-		if got := w.Body.String(); got != http.StatusText(w.Code) {
-			t.Errorf(testErrorFormat, got, http.StatusText(w.Code))
-		}
+		assert.Equal(tt.code, w.Code)
+		assert.Equal(http.StatusText(w.Code), w.Body.String())
 	}
 }
 
@@ -334,9 +307,7 @@ func TestContext_Type(t *testing.T) {
 	for _, tt := range tests {
 		c := NewContext(nil, httptest.NewRecorder())
 		c.Type(tt.t)
-		if got := c.Get("Content-Type"); got != tt.expected {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, c.Get("Content-Type"))
 	}
 }
 
@@ -372,10 +343,7 @@ func TestContext_Links(t *testing.T) {
 		c.Set("Link", tt.origin)
 		c.Links(tt.links)
 		got := c.Get("Link")
-		arr1, arr2 := strings.Split(got, ", "), strings.Split(tt.expected, ", ")
-		if !stringSliceEquals(arr1, arr2) {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.ElementsMatch(t, strings.Split(tt.expected, ", "), strings.Split(got, ", "))
 	}
 }
 
@@ -401,9 +369,7 @@ func TestContext_Location(t *testing.T) {
 			c.Set("Referrer", tt.referrer)
 		}
 		c.Location(tt.location)
-		if got := c.Get("location"); got != tt.expected {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, c.Get("location"))
 	}
 }
 
@@ -425,9 +391,7 @@ func TestContext_Attachment(t *testing.T) {
 		} else {
 			c.Attachment(tt.s)
 		}
-		if got := c.Get("Content-Disposition"); got != tt.expected {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, c.Get("Content-Disposition"))
 	}
 }
 
@@ -458,9 +422,7 @@ func TestContext_Cookie(t *testing.T) {
 	for _, tt := range tests {
 		c := NewContext(nil, httptest.NewRecorder())
 		c.Cookie(tt.cookie)
-		if got := c.Get("Set-Cookie"); got != tt.expected {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, c.Get("Set-Cookie"))
 	}
 }
 
@@ -485,16 +447,13 @@ func TestContext_ClearCookie(t *testing.T) {
 		},
 	}
 
+	assert := assert.New(t)
 	for _, tt := range tests {
 		c := NewContext(nil, httptest.NewRecorder())
 		c.Cookie(tt.cookie)
-		if got := c.Get("Set-Cookie"); got != tt.expected[0] {
-			t.Errorf(testErrorFormat, got, tt.expected[0])
-		}
+		assert.Equal(tt.expected[0], c.Get("Set-Cookie"))
 		c.ClearCookie(tt.cookie)
-		if got := c.Writer.Header()["Set-Cookie"]; !reflect.DeepEqual(got, tt.expected) {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(tt.expected, c.Writer.Header()["Set-Cookie"])
 	}
 }
 
@@ -506,18 +465,12 @@ func TestContext_SendFile(t *testing.T) {
 
 	deferFn := func(w *httptest.ResponseRecorder, code int, e error) {
 		err := recover()
-		if err == nil {
-			t.Errorf(testErrorFormat, nil, "error")
+		assert.NotNil(t, err)
+		if e != nil {
+			assert.Equal(t, e, err)
 		}
-		if e != nil && err != e {
-			t.Errorf(testErrorFormat, err, e)
-		}
-		if w.Code != code {
-			t.Errorf(testErrorFormat, w.Code, code)
-		}
-		if got := w.Header()["Content-Type"]; len(got) != 0 {
-			t.Errorf(testErrorFormat, got, nil)
-		}
+		assert.Equal(t, code, w.Code)
+		assert.Empty(t, w.Header()["Content-Type"])
 	}
 
 	maxAge := time.Hour
@@ -597,6 +550,7 @@ func TestContext_SendFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			assert := assert.New(t)
 			c := NewContext(nil, httptest.NewRecorder())
 			w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
 			if tt.deferFn != nil {
@@ -608,40 +562,26 @@ func TestContext_SendFile(t *testing.T) {
 				c.SendFile(tt.filePath, tt.options)
 				fileInfo, fileContent := getFileContent(tt.filePath)
 				lastModified := fileInfo.ModTime().UTC().Format(timeFormat)
-				if got := w.Code; got != tt.expectedStatus {
-					t.Errorf(testErrorFormat, got, tt.expectedContentType)
-				}
-				if got := w.Body.String(); got != fileContent {
-					t.Errorf(testErrorFormat, got, fileContent)
-				}
-				if got := c.Get("Content-Type"); got != tt.expectedContentType {
-					t.Errorf(testErrorFormat, got, tt.expectedContentType)
-				}
+				assert.Equal(tt.expectedStatus, w.Code)
+				assert.Equal(fileContent, w.Body.String())
+				assert.Equal(tt.expectedContentType, c.Get("Content-Type"))
 				if tt.options != nil {
 					if tt.options.MaxAge != nil {
 						cc := fmt.Sprintf("max-age=%.0f", maxAge.Seconds())
-						if got := c.Get("Cache-Control"); got != cc {
-							t.Errorf(testErrorFormat, got, cc)
-						}
+						assert.Equal(cc, c.Get("Cache-Control"))
 					}
 					if tt.options.Header != nil {
 						for k, v := range tt.options.Header {
-							if got := c.Get(k); got != v {
-								t.Errorf(testErrorFormat, got, v)
-							}
+							assert.Equal(v, c.Get(k))
 						}
 					}
 					expectedLastModified := lastModified
 					if tt.options.LastModifiedDisabled {
 						expectedLastModified = ""
 					}
-					if got := c.Get("Last-Modified"); got != expectedLastModified {
-						t.Errorf(testErrorFormat, got, expectedLastModified)
-					}
+					assert.Equal(expectedLastModified, c.Get("Last-Modified"))
 				} else {
-					if got := c.Get("Last-Modified"); got != lastModified {
-						t.Errorf(testErrorFormat, got, lastModified)
-					}
+					assert.Equal(lastModified, c.Get("Last-Modified"))
 				}
 			}
 		})
@@ -664,24 +604,19 @@ func TestContext_Download(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		assert := assert.New(t)
 		c := NewContext(nil, httptest.NewRecorder())
 		c.Download(tt.filePath, tt.options)
 		w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
-		if got := w.Code; got != tt.expectedStatus {
-			t.Errorf(testErrorFormat, got, tt.expectedStatus)
-		}
+		assert.Equal(tt.expectedStatus, w.Code)
 		fileInfo, fileContent := getFileContent(tt.filePath)
-		if got := w.Body.String(); got != fileContent {
-			t.Errorf(testErrorFormat, got, fileContent)
-		}
+		assert.Equal(fileContent, w.Body.String())
 		name := fileInfo.Name()
 		if tt.options != nil && tt.options.Name != "" {
 			name = tt.options.Name
 		}
 		contentDisposition := fmt.Sprintf("attachment; filename=\"%s\"", name)
-		if got := c.Get("Content-Disposition"); got != contentDisposition {
-			t.Errorf(testErrorFormat, got, contentDisposition)
-		}
+		assert.Equal(contentDisposition, c.Get("Content-Disposition"))
 	}
 }
 
@@ -715,9 +650,7 @@ func TestContext_End(t *testing.T) {
 			c := NewContext(nil, httptest.NewRecorder())
 			tt.handle(c)
 			w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
-			if got := w.Body.String(); got != tt.expected {
-				t.Errorf(testErrorFormat, got, tt.expected)
-			}
+			assert.Equal(t, tt.expected, w.Body.String())
 		})
 	}
 }
@@ -803,20 +736,15 @@ func TestContext_Format(t *testing.T) {
 		}(tt))
 	}
 
+	assert := assert.New(t)
 	for i, tt := range tests {
 		path := "/" + strconv.Itoa(i)
 		header := http.Header{"Accept": dotRegexp.Split(tt.accept, -1)}
 		statusCode, _, body, err := request(http.MethodGet, server.URL+path, header)
 		body = strings.Trim(body, "\n")
-		if err != nil {
-			t.Error(err)
-		}
-		if got := statusCode; got != tt.expectedStatus {
-			t.Errorf(testErrorFormat, got, tt.expectedStatus)
-		}
-		if got := body; got != tt.expectedBody {
-			t.Errorf(testErrorFormat, got, tt.expectedBody)
-		}
+		assert.Nil(err)
+		assert.Equal(tt.expectedStatus, statusCode)
+		assert.Equal(tt.expectedBody, body)
 	}
 }
 
@@ -829,19 +757,14 @@ func TestContext_String(t *testing.T) {
 		{"foo", 200, plainType},
 	}
 
+	assert := assert.New(t)
 	for _, tt := range tests {
 		c := NewContext(nil, httptest.NewRecorder())
 		c.String(tt.s)
 		w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
-		if got := w.Code; got != tt.expectedStatus {
-			t.Errorf(testErrorFormat, got, tt.expectedStatus)
-		}
-		if got := c.Get("Content-Type"); got != tt.expectedContentType {
-			t.Errorf(testErrorFormat, got, tt.expectedContentType)
-		}
-		if got := w.Body.String(); got != tt.s {
-			t.Errorf(testErrorFormat, got, tt.s)
-		}
+		assert.Equal(tt.expectedStatus, w.Code)
+		assert.Equal(tt.expectedContentType, c.Get("Content-Type"))
+		assert.Equal(tt.s, w.Body.String())
 	}
 }
 
@@ -898,22 +821,14 @@ func TestContext_Json(t *testing.T) {
 		},
 	}
 
+	assert := assert.New(t)
 	for _, tt := range tests {
 		c := NewContext(nil, httptest.NewRecorder())
 		tt.handle(c)
 		w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
-		if got := w.Code; got != tt.expectedStatus {
-			t.Errorf(testErrorFormat, got, tt.expectedStatus)
-		}
-		if got := c.Get("Content-Type"); got != tt.expectedContentType {
-			t.Errorf(testErrorFormat, got, tt.expectedContentType)
-		}
-		buf := bytes.NewBuffer([]byte(tt.expectedBody))
-		buf.WriteByte('\n')
-		expectedBody := buf.String()
-		if got := w.Body.String(); got != expectedBody {
-			t.Errorf(testErrorFormat, got, expectedBody)
-		}
+		assert.Equal(tt.expectedStatus, w.Code)
+		assert.Equal(tt.expectedContentType, c.Get("Content-Type"))
+		assert.Equal(tt.expectedBody+"\n", w.Body.String())
 	}
 }
 
@@ -981,44 +896,29 @@ func TestContext_Jsonp(t *testing.T) {
 		},
 	}
 
+	assert := assert.New(t)
 	for _, tt := range tests {
 		c := NewContext(tt.request, httptest.NewRecorder())
 		tt.handle(c)
 		w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
-		if got := w.Code; got != tt.expectedStatus {
-			t.Errorf(testErrorFormat, got, tt.expectedStatus)
-		}
-		if got := c.Get("Content-Type"); got != tt.expectedContentType {
-			t.Errorf(testErrorFormat, got, tt.expectedContentType)
-		}
-		if got := w.Body.String(); got != tt.expectedBody {
-			t.Errorf(testErrorFormat, got, tt.expectedBody)
-		}
+		assert.Equal(tt.expectedStatus, w.Code)
+		assert.Equal(tt.expectedContentType, c.Get("Content-Type"))
+		assert.Equal(tt.expectedBody, w.Body.String())
 	}
 }
 
 func TestContext_Redirect(t *testing.T) {
 	deferFn1 := func(w *httptest.ResponseRecorder, code int, cType, loc, body string) {
-		if err := recover(); err == nil {
-			t.Errorf(testErrorFormat, "nil", "error")
-		}
-		if got := w.Code; got != code {
-			t.Errorf(testErrorFormat, got, code)
-		}
-		if got := w.Header().Get("Content-Type"); got != cType {
-			t.Errorf(testErrorFormat, got, cType)
-		}
-		if got := w.Header().Get("Location"); got != loc {
-			t.Errorf(testErrorFormat, got, loc)
-		}
-		if got := w.Body.String(); got != body {
-			t.Errorf(testErrorFormat, got, body)
-		}
+		err := recover()
+		assert.NotNil(t, err)
+		assert.Equal(t, code, w.Code)
+		assert.Equal(t, cType, w.Header().Get("Content-Type"))
+		assert.Equal(t, loc, w.Header().Get("Location"))
+		assert.Equal(t, body, w.Body.String())
 	}
 	deferFn2 := func(w *httptest.ResponseRecorder, code int, contentType, location, body string) {
-		if err := recover(); err != nil {
-			t.Errorf(testErrorFormat, err, "nil")
-		}
+		err := recover()
+		assert.Nil(t, err)
 	}
 	tests := []struct {
 		status         int
@@ -1058,22 +958,15 @@ func TestContext_Redirect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
+			assert := assert.New(t)
 			c := NewContext(httptest.NewRequest(tt.method, "/", nil), httptest.NewRecorder())
 			w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
 			defer tt.deferFn(w, tt.expectedStatus, tt.expectedType, tt.expectedLoc, tt.expectedBody)
 			c.Redirect(tt.status, tt.location)
-			if got := c.response.Status(); got != tt.expectedStatus {
-				t.Errorf(testErrorFormat, got, tt.expectedStatus)
-			}
-			if got := w.Header().Get("Content-Type"); got != tt.expectedType {
-				t.Errorf(testErrorFormat, got, tt.expectedType)
-			}
-			if got := c.Get("Location"); got != tt.expectedLoc {
-				t.Errorf(testErrorFormat, got, tt.expectedLoc)
-			}
-			if got := w.Body.String(); got != tt.expectedBody {
-				t.Errorf(testErrorFormat, got, tt.expectedBody)
-			}
+			assert.Equal(tt.expectedStatus, c.response.Status())
+			assert.Equal(tt.expectedType, w.Header().Get("Content-Type"))
+			assert.Equal(tt.expectedLoc, c.Get("Location"))
+			assert.Equal(tt.expectedBody, w.Body.String())
 		})
 	}
 }
@@ -1126,18 +1019,11 @@ func TestContext_Render(t *testing.T) {
 			jsonType,
 			"",
 			func(w *httptest.ResponseRecorder, code int, contentType, body string) {
-				if got := recover(); got == nil {
-					t.Errorf(testErrorFormat, got, "error")
-				}
-				if got := w.Code; got != code {
-					t.Errorf(testErrorFormat, got, code)
-				}
-				if got := w.Header().Get("Content-Type"); got != contentType {
-					t.Errorf(testErrorFormat, got, contentType)
-				}
-				if got := w.Body.String(); got != body {
-					t.Errorf(testErrorFormat, got, body)
-				}
+				err := recover()
+				assert.NotNil(t, err)
+				assert.Equal(t, code, w.Code)
+				assert.Equal(t, contentType, w.Header().Get("Content-Type"))
+				assert.Equal(t, body, w.Body.String())
 			},
 		},
 		{
@@ -1160,18 +1046,11 @@ func TestContext_Render(t *testing.T) {
 			jsonpType,
 			"",
 			func(w *httptest.ResponseRecorder, code int, contentType, body string) {
-				if got := recover(); got == nil {
-					t.Errorf(testErrorFormat, got, "error")
-				}
-				if got := w.Code; got != code {
-					t.Errorf(testErrorFormat, got, code)
-				}
-				if got := w.Header().Get("Content-Type"); got != contentType {
-					t.Errorf(testErrorFormat, got, contentType)
-				}
-				if got := w.Body.String(); got != body {
-					t.Errorf(testErrorFormat, got, body)
-				}
+				err := recover()
+				assert.NotNil(t, err)
+				assert.Equal(t, code, w.Code)
+				assert.Equal(t, contentType, w.Header().Get("Content-Type"))
+				assert.Equal(t, body, w.Body.String())
 			},
 		},
 		{
@@ -1191,27 +1070,19 @@ func TestContext_Render(t *testing.T) {
 			"",
 			"",
 			func(w *httptest.ResponseRecorder, code int, contentType, body string) {
-				if got := recover(); got == nil {
-					t.Errorf(testErrorFormat, got, "error")
-				}
-				if got := w.Code; got != code {
-					t.Errorf(testErrorFormat, got, code)
-				}
-				if got := w.Header().Get("Content-Type"); got != contentType {
-					t.Errorf(testErrorFormat, got, contentType)
-				}
-				if got := w.Header().Get("Location"); got != "" {
-					t.Errorf(testErrorFormat, got, "")
-				}
-				if got := w.Body.String(); got != body {
-					t.Errorf(testErrorFormat, got, body)
-				}
+				err := recover()
+				assert.NotNil(t, err)
+				assert.Equal(t, code, w.Code)
+				assert.Equal(t, contentType, w.Header().Get("Content-Type"))
+				assert.Equal(t, "", w.Header().Get("Location"))
+				assert.Equal(t, body, w.Body.String())
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			assert := assert.New(t)
 			c := NewContext(tt.request, httptest.NewRecorder())
 			if tt.expectedStatus != 200 {
 				c.Status(tt.expectedStatus)
@@ -1222,25 +1093,15 @@ func TestContext_Render(t *testing.T) {
 				c.Render(tt.renderer)
 			} else {
 				c.Render(tt.renderer)
-				if got := w.Code; got != tt.expectedStatus {
-					t.Errorf(testErrorFormat, got, tt.expectedStatus)
-				}
-				if got := c.Get("Content-Type"); got != tt.expectedContentType {
-					t.Errorf(testErrorFormat, got, tt.expectedContentType)
-				}
+				assert.Equal(tt.expectedStatus, w.Code)
+				assert.Equal(tt.expectedContentType, c.Get("Content-Type"))
 				expectedBody := tt.expectedBody
 				if _, ok := tt.renderer.(renderer.JSON); ok {
-					buf := bytes.NewBuffer([]byte(tt.expectedBody))
-					buf.WriteByte('\n')
-					expectedBody = buf.String()
+					expectedBody += "\n"
 				}
-				if got := w.Body.String(); got != expectedBody {
-					t.Errorf(testErrorFormat, got, expectedBody)
-				}
+				assert.Equal(expectedBody, w.Body.String())
 				if rr, ok := tt.renderer.(renderer.Redirect); ok {
-					if got := w.Header().Get("Location"); got != rr.Location {
-						t.Errorf(testErrorFormat, got, rr.Location)
-					}
+					assert.Equal(rr.Location, w.Header().Get("Location"))
 				}
 			}
 		})
@@ -1266,10 +1127,4 @@ func getFileContent(p string) (os.FileInfo, string) {
 	}
 
 	return fileInfo, string(bts)
-}
-
-func stringSliceEquals(a, b []string) bool {
-	sort.StringSlice(a).Sort()
-	sort.StringSlice(b).Sort()
-	return strings.Join(a, ",") == strings.Join(b, ",")
 }

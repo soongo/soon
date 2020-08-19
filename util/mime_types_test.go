@@ -6,6 +6,8 @@ package util
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestLookupMimeType(t *testing.T) {
@@ -17,9 +19,7 @@ func TestLookupMimeType(t *testing.T) {
 	}
 
 	for k, v := range tests {
-		if got := LookupMimeType(k); got != v {
-			t.Errorf(testErrorFormat, got, v)
-		}
+		assert.Equal(t, v, LookupMimeType(k))
 	}
 }
 
@@ -36,9 +36,6 @@ func TestLookupCharset(t *testing.T) {
 	}
 
 	for k, v := range tests {
-
-		if got := LookupCharset(k); got != v {
-			t.Errorf(testErrorFormat, got, v)
-		}
+		assert.Equal(t, v, LookupCharset(k))
 	}
 }

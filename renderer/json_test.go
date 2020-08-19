@@ -5,19 +5,18 @@
 package renderer
 
 import (
-	"bytes"
 	"errors"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestJSON_RenderHeader(t *testing.T) {
 	w := httptest.NewRecorder()
 	renderer := JSON{nil}
 	renderer.RenderHeader(w, nil)
-	if got := w.Header().Get("Content-Type"); got != jsonContentType {
-		t.Errorf(testErrorFormat, got, jsonContentType)
-	}
+	assert.Equal(t, jsonContentType, w.Header().Get("Content-Type"))
 }
 
 func TestJSON_Render(t *testing.T) {
@@ -47,27 +46,17 @@ func TestJSON_Render(t *testing.T) {
 		{func() {}, "null", errors.New("")},
 	}
 
+	assert := assert.New(t)
 	for _, tt := range tests {
 		w := httptest.NewRecorder()
 		renderer := JSON{tt.data}
 		err := renderer.Render(w, nil)
 		if tt.err != nil {
-			if err == nil {
-				t.Errorf(testErrorFormat, err, "none nil error")
-			}
-			if got := w.Body.String(); got != "" {
-				t.Errorf(testErrorFormat, got, "")
-			}
+			assert.NotNil(err)
+			assert.Equal("", w.Body.String())
 		} else {
-			if err != nil {
-				t.Errorf(testErrorFormat, err, "nil")
-			}
-			buf := bytes.NewBuffer([]byte(tt.expected))
-			buf.WriteByte('\n')
-			expected := buf.String()
-			if got := w.Body.String(); got != expected {
-				t.Errorf(testErrorFormat, got, expected)
-			}
+			assert.Nil(err)
+			assert.Equal(tt.expected+"\n", w.Body.String())
 		}
 	}
 }

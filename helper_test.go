@@ -7,6 +7,8 @@ package soon
 import (
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestResolveAddress(t *testing.T) {
@@ -24,9 +26,7 @@ func TestResolveAddress(t *testing.T) {
 			"",
 			"",
 			func() {
-				if got := recover(); got == nil {
-					t.Errorf(testErrorFormat, got, "none nil error")
-				}
+				assert.NotNil(t, recover())
 			},
 		},
 		{nil, "3000", ":3000", nil},
@@ -40,9 +40,7 @@ func TestResolveAddress(t *testing.T) {
 			}()
 		} else {
 			os.Setenv("PORT", tt.envPort)
-			if got := resolveAddress(tt.p); got != tt.expected {
-				t.Errorf(testErrorFormat, got, tt.expected)
-			}
+			assert.Equal(t, tt.expected, resolveAddress(tt.p))
 		}
 	}
 }

@@ -9,9 +9,10 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type header map[string]string
@@ -136,34 +137,23 @@ func TestRouter(t *testing.T) {
 	t.Run("one-by-one", func(t *testing.T) {
 		for _, tt := range tests {
 			t.Run("", func(t *testing.T) {
+				assert := assert.New(t)
 				router := NewRouter(tt.routerOption)
 				router.GET(tt.route, makeHandle(tt))
 				server := httptest.NewServer(router)
 				defer server.Close()
 
 				statusCode, header, body, err := request("GET", server.URL+tt.path, nil)
-				if err != nil {
-					t.Error(err)
-				}
-				if statusCode != tt.statusCode {
-					t.Errorf(testErrorFormat, statusCode, tt.statusCode)
-				}
+				assert.Nil(err)
+				assert.Equal(tt.statusCode, statusCode)
 				for k, v := range tt.header {
-					if header.Get(k) != v {
-						t.Errorf(testErrorFormat, header.Get(k), v)
-					}
+					assert.Equal(v, header.Get(k))
 				}
-				if body != tt.body {
-					t.Errorf(testErrorFormat, body, tt.body)
-				}
+				assert.Equal(tt.body, body)
 
 				statusCode, _, _, err = request("HEAD", server.URL+tt.path, nil)
-				if err != nil {
-					t.Error(err)
-				}
-				if statusCode != 404 {
-					t.Errorf(testErrorFormat, statusCode, 404)
-				}
+				assert.Nil(err)
+				assert.Equal(404, statusCode)
 			})
 		}
 	})
@@ -201,26 +191,20 @@ func TestRouter(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run("", func(t *testing.T) {
+				assert := assert.New(t)
 				statusCode, header, body, err := request("GET", server.URL+tt.path, nil)
-				if err != nil {
-					t.Error(err)
-				}
-				if statusCode != tt.statusCode {
-					t.Errorf(testErrorFormat, statusCode, tt.statusCode)
-				}
+				assert.Nil(err)
+				assert.Equal(tt.statusCode, statusCode)
 				for k, v := range tt.header {
-					if header.Get(k) != v {
-						t.Errorf(testErrorFormat, header.Get(k), v)
-					}
+					assert.Equal(v, header.Get(k))
 				}
-				if body != tt.body {
-					t.Errorf(testErrorFormat, body, tt.body)
-				}
+				assert.Equal(tt.body, body)
 			})
 		}
 	})
 
 	t.Run("sub-router-with-custom-options", func(t *testing.T) {
+		assert := assert.New(t)
 		router := NewRouter(&RouterOption{true, true})
 		router_1 := NewRouter()
 		router_1.GET("/1-a", func(c *Context) {
@@ -275,15 +259,9 @@ func TestRouter(t *testing.T) {
 		for _, tt := range tests {
 			t.Run("", func(t *testing.T) {
 				statusCode, _, body, err := request("GET", server.URL+tt.path, nil)
-				if err != nil {
-					t.Error(err)
-				}
-				if statusCode != tt.statusCode {
-					t.Errorf(testErrorFormat, statusCode, tt.statusCode)
-				}
-				if body != tt.body {
-					t.Errorf(testErrorFormat, body, tt.body)
-				}
+				assert.Nil(err)
+				assert.Equal(tt.statusCode, statusCode)
+				assert.Equal(tt.body, body)
 			})
 		}
 	})
@@ -416,6 +394,7 @@ func TestRouterMiddleware(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
+			assert := assert.New(t)
 			router := NewRouter()
 			if tt.middleware != nil {
 				router.Use(stringOr(tt.middlewareRoute, tt.route), tt.middleware)
@@ -428,17 +407,9 @@ func TestRouterMiddleware(t *testing.T) {
 			defer server.Close()
 
 			statusCode, _, body, err := request("GET", server.URL+tt.path, nil)
-			if err != nil {
-				t.Error(err)
-			}
-
-			if statusCode != tt.statusCode {
-				t.Errorf(testErrorFormat, statusCode, tt.statusCode)
-			}
-
-			if body != body200 {
-				t.Errorf(testErrorFormat, body, body200)
-			}
+			assert.Nil(err)
+			assert.Equal(tt.statusCode, statusCode)
+			assert.Equal(body200, body)
 		})
 	}
 }
@@ -490,96 +461,70 @@ func TestRouter_Params(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
+			assert := assert.New(t)
 			router1 := NewRouter()
 			router1.Use(tt.route1, func(c *Context) {
 				if c.Request.URL.Path == tt.path1 {
-					if !reflect.DeepEqual(c.Params(), tt.middlewareParams1) {
-						t.Errorf(testErrorFormat, c.Params(), tt.middlewareParams1)
-					}
+					assert.Equal(tt.middlewareParams1, c.Params())
 				}
 				c.Next()
 			})
 			router1.GET(tt.route1, func(c *Context) {
-				if !reflect.DeepEqual(c.Params(), tt.params1) {
-					t.Errorf(testErrorFormat, c.Params(), tt.params1)
-				}
+				assert.Equal(tt.params1, c.Params())
 				c.String(body200)
 			})
 			router2 := NewRouter()
 			router2.Use(tt.route2, func(c *Context) {
 				if c.Request.URL.Path == tt.path2 {
-					if !reflect.DeepEqual(c.Params(), tt.middlewareParams2) {
-						t.Errorf(testErrorFormat, c.Params(), tt.middlewareParams2)
-					}
+					assert.Equal(tt.middlewareParams2, c.Params())
 				}
 				c.Next()
 			})
 			router2.GET(tt.route2, func(c *Context) {
-				if !reflect.DeepEqual(c.Params(), tt.params2) {
-					t.Errorf(testErrorFormat, c.Params(), tt.params2)
-				}
+				assert.Equal(tt.params2, c.Params())
 				c.String(body200)
 			})
 			router3 := NewRouter()
 			router3.Use(tt.route3, func(c *Context) {
 				if c.Request.URL.Path == tt.path3 {
-					if !reflect.DeepEqual(c.Params(), tt.middlewareParams3) {
-						t.Errorf(testErrorFormat, c.Params(), tt.middlewareParams3)
-					}
+					assert.Equal(tt.middlewareParams3, c.Params())
 				}
 				c.Next()
 			})
 			router3.Use(func(c *Context) {
-				if !reflect.DeepEqual(c.Params(), tt.params3) {
-					t.Errorf(testErrorFormat, c.Params(), tt.params3)
-				}
+				assert.Equal(tt.params3, c.Params())
 				c.Next()
 			})
 			router3.GET(tt.route3, func(c *Context) {
-				if !reflect.DeepEqual(c.Params(), tt.params3) {
-					t.Errorf(testErrorFormat, c.Params(), tt.params3)
-				}
+				assert.Equal(tt.params3, c.Params())
 				c.String(body200)
 			})
 			router2.Use(tt.route2, router3)
 			router1.Use(tt.route1, router2)
 			router1.Use(func(v interface{}, c *Context) {
-				if v != nil {
-					t.Errorf(testErrorFormat, v, nil)
-				}
+				assert.Nil(v)
 			})
 			server := httptest.NewServer(router1)
 			defer server.Close()
 
 			statusCode, _, _, err := request("GET", server.URL+tt.path1, nil)
-			if err != nil {
-				t.Error(err)
-			}
-			if statusCode != 200 {
-				t.Errorf(testErrorFormat, statusCode, 200)
-			}
+			assert.Nil(err)
+			assert.Equal(200, statusCode)
 
 			statusCode, _, _, err = request("GET", server.URL+tt.path2, nil)
-			if err != nil {
-				t.Error(err)
-			}
-			if statusCode != 200 {
-				t.Errorf(testErrorFormat, statusCode, 200)
-			}
+			assert.Nil(err)
+			assert.Equal(200, statusCode)
 
 			statusCode, _, _, err = request("GET", server.URL+tt.path3, nil)
-			if err != nil {
-				t.Error(err)
-			}
-			if statusCode != 200 {
-				t.Errorf(testErrorFormat, statusCode, 200)
-			}
+			assert.Nil(err)
+			assert.Equal(200, statusCode)
 		})
 	}
 
 	t.Run("panic", func(t *testing.T) {
 		for _, tt := range tests {
 			t.Run("", func(t *testing.T) {
+				assert := assert.New(t)
 				router1 := NewRouter()
 				router1.GET(tt.route1, func(c *Context) {
 					panic("error")
@@ -589,12 +534,8 @@ func TestRouter_Params(t *testing.T) {
 					panic("error")
 				})
 				router2.Use(tt.route2, func(v interface{}, c *Context) {
-					if v == nil {
-						t.Errorf(testErrorFormat, v, "none nil")
-					}
-					if !reflect.DeepEqual(c.Params(), tt.middlewareParams2) {
-						t.Errorf(testErrorFormat, c.Params(), tt.middlewareParams2)
-					}
+					assert.NotNil(v)
+					assert.Equal(tt.middlewareParams2, c.Params())
 					c.SendStatus(500)
 				})
 				router3 := NewRouter()
@@ -602,23 +543,15 @@ func TestRouter_Params(t *testing.T) {
 					panic("error")
 				})
 				router3.Use(tt.route3, func(v interface{}, c *Context) {
-					if v == nil {
-						t.Errorf(testErrorFormat, v, "none nil")
-					}
-					if !reflect.DeepEqual(c.Params(), tt.middlewareParams3) {
-						t.Errorf(testErrorFormat, c.Params(), tt.middlewareParams3)
-					}
+					assert.NotNil(v)
+					assert.Equal(tt.middlewareParams3, c.Params())
 					c.SendStatus(500)
 				})
 				router2.Use(tt.route2, router3)
 				router1.Use(tt.route1, router2)
 				router1.Use(tt.route1, func(v interface{}, c *Context) {
-					if v == nil {
-						t.Errorf(testErrorFormat, v, "none nil")
-					}
-					if !reflect.DeepEqual(c.Params(), tt.middlewareParams1) {
-						t.Errorf(testErrorFormat, c.Params(), tt.middlewareParams1)
-					}
+					assert.NotNil(v)
+					assert.Equal(tt.middlewareParams1, c.Params())
 					c.SendStatus(500)
 				})
 
@@ -626,28 +559,16 @@ func TestRouter_Params(t *testing.T) {
 				defer server.Close()
 
 				statusCode, _, _, err := request("GET", server.URL+tt.path1, nil)
-				if err != nil {
-					t.Error(err)
-				}
-				if statusCode != 500 {
-					t.Errorf(testErrorFormat, statusCode, 500)
-				}
+				assert.Nil(err)
+				assert.Equal(500, statusCode)
 
 				statusCode, _, _, err = request("GET", server.URL+tt.path2, nil)
-				if err != nil {
-					t.Error(err)
-				}
-				if statusCode != 500 {
-					t.Errorf(testErrorFormat, statusCode, 500)
-				}
+				assert.Nil(err)
+				assert.Equal(500, statusCode)
 
 				statusCode, _, _, err = request("GET", server.URL+tt.path3, nil)
-				if err != nil {
-					t.Error(err)
-				}
-				if statusCode != 500 {
-					t.Errorf(testErrorFormat, statusCode, 500)
-				}
+				assert.Nil(err)
+				assert.Equal(500, statusCode)
 			})
 		}
 	})
@@ -657,27 +578,21 @@ func TestRouterMethods(t *testing.T) {
 	tt := test{route: "/", path: "/", body: body200}
 	check := func(method, url string) {
 		statusCode, _, body, err := request(method, url, nil)
-		if err != nil {
-			t.Error(err)
-		}
-		if statusCode != 200 {
-			t.Errorf(testErrorFormat, statusCode, 200)
-		}
-		if method != "HEAD" && body != tt.body {
-			t.Errorf(testErrorFormat, body, tt.body)
+		assert.Nil(t, err)
+		assert.Equal(t, 200, statusCode)
+
+		if method != "HEAD" {
+			assert.Equal(t, tt.body, body)
 		}
 
+		assert := assert.New(t)
 		for _, m := range methods {
 			if m != method {
 				statusCode, _, body, err = request(m, url, nil)
-				if err != nil {
-					t.Error(err)
-				}
-				if statusCode != 404 {
-					t.Errorf(testErrorFormat, statusCode, 404)
-				}
-				if m != "HEAD" && body != body404 {
-					t.Errorf(testErrorFormat, body, body404)
+				assert.Nil(err)
+				assert.Equal(404, statusCode)
+				if m != "HEAD" {
+					assert.Equal(body404, body)
 				}
 			}
 		}
@@ -743,6 +658,7 @@ func TestRouterMethods(t *testing.T) {
 func TestRouter_Handle(t *testing.T) {
 	for i, method := range methods {
 		t.Run(method, func(t *testing.T) {
+			assert := assert.New(t)
 			tt := test{route: "/", path: "/", body: body200}
 			router := NewRouter()
 			router.Handle(method, tt.route, makeHandle(tt))
@@ -750,26 +666,18 @@ func TestRouter_Handle(t *testing.T) {
 			defer server.Close()
 
 			statusCode, _, body, err := request(method, server.URL+tt.path, nil)
-			if err != nil {
-				t.Error(err)
-			}
-			if statusCode != 200 {
-				t.Errorf(testErrorFormat, statusCode, 200)
-			}
-			if method != "HEAD" && body != tt.body {
-				t.Errorf(testErrorFormat, body, tt.body)
+			assert.Nil(err)
+			assert.Equal(200, statusCode)
+			if method != "HEAD" {
+				assert.Equal(tt.body, body)
 			}
 
 			method = methods[(i+1)%len(methods)]
 			statusCode, _, body, err = request(method, server.URL+tt.path, nil)
-			if err != nil {
-				t.Error(err)
-			}
-			if statusCode != 404 {
-				t.Errorf(testErrorFormat, statusCode, 404)
-			}
-			if method != "HEAD" && body != body404 {
-				t.Errorf(testErrorFormat, body, body404)
+			assert.Nil(err)
+			assert.Equal(404, statusCode)
+			if method != "HEAD" {
+				assert.Equal(body404, body)
 			}
 		})
 	}
@@ -784,15 +692,12 @@ func TestRouter_ALL(t *testing.T) {
 
 	for _, method := range methods {
 		t.Run(method, func(t *testing.T) {
+			assert := assert.New(t)
 			statusCode, _, body, err := request(method, server.URL+tt.path, nil)
-			if err != nil {
-				t.Error(err)
-			}
-			if statusCode != 200 {
-				t.Errorf(testErrorFormat, statusCode, 200)
-			}
-			if method != "HEAD" && body != tt.body {
-				t.Errorf(testErrorFormat, body, tt.body)
+			assert.Nil(err)
+			assert.Equal(200, statusCode)
+			if method != "HEAD" {
+				assert.Equal(tt.body, body)
 			}
 		})
 	}
@@ -814,17 +719,14 @@ func TestRouter_Param(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
+			assert := assert.New(t)
 			router := NewRouter()
 			router.Handle(tt.method, tt.route, func(c *Context) {
-				if got := c.Locals().Get(tt.paramName); got != tt.paramValue {
-					t.Errorf(testErrorFormat, got, tt.paramValue)
-				}
+				assert.Equal(tt.paramValue, c.Locals().Get(tt.paramName))
 			})
 			if tt.err != nil {
 				router.Use(func(v interface{}, c *Context) {
-					if got := c.Locals().Get(tt.paramName); got != nil {
-						t.Errorf(testErrorFormat, got, nil)
-					}
+					assert.Equal(nil, c.Locals().Get(tt.paramName))
 				})
 			}
 			router.Param(tt.paramName, func(r *Request, s string) {
@@ -836,13 +738,12 @@ func TestRouter_Param(t *testing.T) {
 			server := httptest.NewServer(router)
 			defer server.Close()
 			_, _, _, err := request(tt.method, server.URL+tt.path, nil)
-			if err != nil {
-				t.Error(err)
-			}
+			assert.Nil(err)
 		})
 	}
 
 	t.Run("once", func(t *testing.T) {
+		assert := assert.New(t)
 		router, calledCount := NewRouter(), 0
 		router.GET("/name/:foo", func(c *Context) {
 			c.Next()
@@ -857,48 +758,33 @@ func TestRouter_Param(t *testing.T) {
 		server := httptest.NewServer(router)
 		defer server.Close()
 		_, _, _, err := request("GET", server.URL+"/name/bar", nil)
-		if err != nil {
-			t.Error(err)
-		}
-		if calledCount != 1 {
-			t.Errorf(testErrorFormat, calledCount, 1)
-		}
+		assert.Nil(err)
+		assert.Equal(1, calledCount)
 		n := 2
 		for i := 0; i < n; i++ {
 			_, _, _, err = request("GET", server.URL+"/name/bar", nil)
-			if err != nil {
-				t.Error(err)
-			}
+			assert.Nil(err)
 		}
-		if calledCount != n+1 {
-			t.Errorf(testErrorFormat, calledCount, n+1)
-		}
+		assert.Equal(n+1, calledCount)
 	})
 
 	t.Run("multiple", func(t *testing.T) {
+		assert := assert.New(t)
 		router, calledCount := NewRouter(), 0
 		router.Use("/:foo", func(c *Context) {
-			if c.Locals().Get("foo") != "name" {
-				t.Errorf(testErrorFormat, c.Locals().Get("foo"), "name")
-			}
+			assert.Equal("name", c.Locals().Get("foo"))
 			c.Next()
 		})
 		router.GET("/name/:foo/:bar", func(c *Context) {
-			if c.Locals().Get("foo") != "id" {
-				t.Errorf(testErrorFormat, c.Locals().Get("foo"), "id")
-			}
+			assert.Equal("id", c.Locals().Get("foo"))
 			c.Next()
 		})
 		router.GET("/name/:foo/:bar", func(c *Context) {
-			if c.Locals().Get("foo") != "id" {
-				t.Errorf(testErrorFormat, c.Locals().Get("foo"), "id")
-			}
+			assert.Equal("id", c.Locals().Get("foo"))
 			c.Next()
 		})
 		router.GET("/name/id/:foo", func(c *Context) {
-			if c.Locals().Get("foo") != "bar" {
-				t.Errorf(testErrorFormat, c.Locals().Get("foo"), "bar")
-			}
+			assert.Equal("bar", c.Locals().Get("foo"))
 			c.String("foo")
 		})
 		router.Param("foo", func(r *Request, s string) {
@@ -908,26 +794,19 @@ func TestRouter_Param(t *testing.T) {
 		server := httptest.NewServer(router)
 		defer server.Close()
 		_, _, _, err := request("GET", server.URL+"/name/id/bar", nil)
-		if err != nil {
-			t.Error(err)
-		}
-		if calledCount != 3 {
-			t.Errorf(testErrorFormat, calledCount, 3)
-		}
+		assert.Nil(err)
+		assert.Equal(3, calledCount)
 		n := 2
 		for i := 0; i < n; i++ {
 			_, _, _, err = request("GET", server.URL+"/name/id/bar", nil)
-			if err != nil {
-				t.Error(err)
-			}
+			assert.Nil(err)
 		}
-		if calledCount != n*3+3 {
-			t.Errorf(testErrorFormat, calledCount, n*3+3)
-		}
+		assert.Equal(n*3+3, calledCount)
 	})
 
 	t.Run("sub-router", func(t *testing.T) {
 		t.Run("", func(t *testing.T) {
+			assert := assert.New(t)
 			router, subRouter, calledCount := NewRouter(), NewRouter(), 0
 			router.GET("/name/:foo", func(c *Context) {
 				c.String("body")
@@ -939,15 +818,12 @@ func TestRouter_Param(t *testing.T) {
 			server := httptest.NewServer(router)
 			defer server.Close()
 			_, _, _, err := request("GET", server.URL+"/name/bar", nil)
-			if err != nil {
-				t.Error(err)
-			}
-			if calledCount != 0 {
-				t.Errorf(testErrorFormat, calledCount, 0)
-			}
+			assert.Nil(err)
+			assert.Equal(0, calledCount)
 		})
 
 		t.Run("", func(t *testing.T) {
+			assert := assert.New(t)
 			router, subRouter, calledCount := NewRouter(), NewRouter(), 0
 			subRouter.GET("/name/:foo", func(c *Context) {
 				c.String("body")
@@ -959,15 +835,12 @@ func TestRouter_Param(t *testing.T) {
 			server := httptest.NewServer(router)
 			defer server.Close()
 			_, _, _, err := request("GET", server.URL+"/name/bar", nil)
-			if err != nil {
-				t.Error(err)
-			}
-			if calledCount != 1 {
-				t.Errorf(testErrorFormat, calledCount, 1)
-			}
+			assert.Nil(err)
+			assert.Equal(1, calledCount)
 		})
 
 		t.Run("", func(t *testing.T) {
+			assert := assert.New(t)
 			router, subRouter, calledCount := NewRouter(), NewRouter(), 0
 			router.Use("/:foo", func(c *Context) {
 				c.Next()
@@ -988,15 +861,12 @@ func TestRouter_Param(t *testing.T) {
 			server := httptest.NewServer(router)
 			defer server.Close()
 			_, _, _, err := request("GET", server.URL+"/name/bar", nil)
-			if err != nil {
-				t.Error(err)
-			}
-			if calledCount != 2 {
-				t.Errorf(testErrorFormat, calledCount, 2)
-			}
+			assert.Nil(err)
+			assert.Equal(2, calledCount)
 		})
 
 		t.Run("", func(t *testing.T) {
+			assert := assert.New(t)
 			router, subRouter, calledCount := NewRouter(), NewRouter(), 0
 			router.Use("/:foo", func(c *Context) {
 				c.Next()
@@ -1020,21 +890,15 @@ func TestRouter_Param(t *testing.T) {
 			server := httptest.NewServer(router)
 			defer server.Close()
 			_, _, _, err := request("GET", server.URL+"/name/bar", nil)
-			if err != nil {
-				t.Error(err)
-			}
-			if calledCount != 4 {
-				t.Errorf(testErrorFormat, calledCount, 4)
-			}
+			assert.Nil(err)
+			assert.Equal(4, calledCount)
 		})
 	})
 }
 
 func TestRouter_Use(t *testing.T) {
 	deferFn := func() {
-		if err := recover(); err == nil {
-			t.Errorf(testErrorFormat, err, "none nil error")
-		}
+		assert.NotNil(t, recover())
 	}
 
 	childRouter := NewRouter()
@@ -1066,9 +930,7 @@ func TestRouter_Use(t *testing.T) {
 			}
 
 			router.Use(tt.params...)
-			if got := len(router.routes); got == 0 {
-				t.Errorf(testErrorFormat, got, ">0")
-			}
+			assert.Greater(t, len(router.routes), 0)
 		})
 	}
 }
@@ -1082,24 +944,22 @@ func TestRouterProxy(t *testing.T) {
 	t.Run("one-by-one", func(t *testing.T) {
 		for _, method := range append(methods, HTTPMethodAll) {
 			t.Run(method, func(t *testing.T) {
+				assert := assert.New(t)
 				router := NewRouter()
 				router.Route(route).Handle(method, handle)
 				server := httptest.NewServer(router)
 				defer server.Close()
 				statusCode, _, body, err := request(method, server.URL+route, nil)
-				if err != nil {
-					t.Error(err)
-				}
-				if statusCode != 200 {
-					t.Errorf(testErrorFormat, statusCode, 200)
-				}
-				if method != http.MethodHead && body != expectedBody {
-					t.Errorf(testErrorFormat, body, expectedBody)
+				assert.Nil(err)
+				assert.Equal(200, statusCode)
+				if method != http.MethodHead {
+					assert.Equal(expectedBody, body)
 				}
 			})
 		}
 
 		t.Run("with-next", func(t *testing.T) {
+			assert := assert.New(t)
 			router := NewRouter()
 			router.Route(route).ALL(func(c *Context) {
 				c.Next()
@@ -1107,32 +967,21 @@ func TestRouterProxy(t *testing.T) {
 			server := httptest.NewServer(router)
 			defer server.Close()
 			statusCode, _, body, err := request(http.MethodGet, server.URL+route, nil)
-			if err != nil {
-				t.Error(err)
-			}
-			if statusCode != 200 {
-				t.Errorf(testErrorFormat, statusCode, 200)
-			}
-			if body != expectedBody {
-				t.Errorf(testErrorFormat, body, expectedBody)
-			}
+			assert.Nil(err)
+			assert.Equal(200, statusCode)
+			assert.Equal(expectedBody, body)
 		})
 
 		t.Run("without-next", func(t *testing.T) {
+			assert := assert.New(t)
 			router := NewRouter()
 			router.Route(route).ALL(func(c *Context) {}).GET(handle)
 			server := httptest.NewServer(router)
 			defer server.Close()
 			statusCode, _, body, err := request(http.MethodGet, server.URL+route, nil)
-			if err != nil {
-				t.Error(err)
-			}
-			if statusCode != 200 {
-				t.Errorf(testErrorFormat, statusCode, 200)
-			}
-			if body != "" {
-				t.Errorf(testErrorFormat, body, "")
-			}
+			assert.Nil(err)
+			assert.Equal(200, statusCode)
+			assert.Equal("", body)
 		})
 	})
 
@@ -1143,15 +992,12 @@ func TestRouterProxy(t *testing.T) {
 		defer server.Close()
 		for _, method := range methods {
 			t.Run(method, func(t *testing.T) {
+				assert := assert.New(t)
 				statusCode, _, body, err := request(method, server.URL+route, nil)
-				if err != nil {
-					t.Error(err)
-				}
-				if statusCode != 200 {
-					t.Errorf(testErrorFormat, statusCode, 200)
-				}
-				if method != http.MethodHead && expectedBody != body {
-					t.Errorf(testErrorFormat, body, expectedBody)
+				assert.Nil(err)
+				assert.Equal(200, statusCode)
+				if method != http.MethodHead {
+					assert.Equal(expectedBody, body)
 				}
 			})
 		}

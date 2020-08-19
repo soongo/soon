@@ -6,6 +6,8 @@ package soon
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSetMode(t *testing.T) {
@@ -19,9 +21,7 @@ func TestSetMode(t *testing.T) {
 		{
 			"Unknown",
 			func() {
-				if got := recover(); got == nil {
-					t.Errorf(testErrorFormat, got, "none nil error")
-				}
+				assert.NotNil(t, recover())
 			},
 		},
 	}
@@ -34,9 +34,7 @@ func TestSetMode(t *testing.T) {
 			}()
 		} else {
 			SetMode(tt.mode)
-			if got := Mode(); got != tt.mode {
-				t.Errorf(testErrorFormat, got, tt.mode)
-			}
+			assert.Equal(t, tt.mode, Mode())
 		}
 	}
 }

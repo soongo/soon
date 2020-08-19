@@ -6,11 +6,10 @@ package util
 
 import (
 	"os"
-	"reflect"
 	"testing"
-)
 
-var testErrorFormat = "got `%v`, expect `%v`"
+	"github.com/stretchr/testify/assert"
+)
 
 func TestStringSlice_Contains(t *testing.T) {
 	arr := StringSlice{"foo", "*", "你好"}
@@ -26,9 +25,7 @@ func TestStringSlice_Contains(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		if got := tt.s.Contains(tt.str); got != tt.expected {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, tt.s.Contains(tt.str))
 	}
 }
 
@@ -46,9 +43,7 @@ func TestStringSlice_Index(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		if got := tt.s.Index(tt.str); got != tt.expected {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, tt.s.Index(tt.str))
 	}
 }
 
@@ -83,9 +78,7 @@ func TestStringSlice_Filter(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		if got := tt.s.Filter(tt.filter); !reflect.DeepEqual(got, tt.expected) {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, tt.s.Filter(tt.filter))
 	}
 }
 
@@ -113,9 +106,7 @@ func TestStringSlice_Map(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		if got := tt.s.Map(tt.fn); !reflect.DeepEqual(got, tt.expected) {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, tt.s.Map(tt.fn))
 	}
 }
 
@@ -133,9 +124,7 @@ func TestFileExists(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		if got := FileExists(tt.p); got != tt.expected {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, FileExists(tt.p))
 	}
 }
 
@@ -147,9 +136,7 @@ func TestEncodeURI(t *testing.T) {
 		"https://a.com/Go_шеллы": "https://a.com/Go_%D1%88%D0%B5%D0%BB%D0%BB%D1%8B",
 	}
 	for k, v := range tests {
-		if got := EncodeURI(k); got != v {
-			t.Errorf(testErrorFormat, got, v)
-		}
+		assert.Equal(t, v, EncodeURI(k))
 	}
 }
 
@@ -161,9 +148,7 @@ func TestEncodeURIComponent(t *testing.T) {
 		"https://a.com/Go_шеллы": "https%3A%2F%2Fa.com%2FGo_%D1%88%D0%B5%D0%BB%D0%BB%D1%8B",
 	}
 	for k, v := range tests {
-		if got := EncodeURIComponent(k); got != v {
-			t.Errorf(testErrorFormat, got, v)
-		}
+		assert.Equal(t, v, EncodeURIComponent(k))
 	}
 }
 
@@ -179,9 +164,7 @@ func TestAddPrefixSlash(t *testing.T) {
 		{"//abc", "//abc"},
 	}
 	for _, tt := range tests {
-		if got := AddPrefixSlash(tt.p); got != tt.expected {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, AddPrefixSlash(tt.p))
 	}
 }
 
@@ -200,8 +183,6 @@ func TestRouteJoin(t *testing.T) {
 		{"abc//", "//123", "abc///123"},
 	}
 	for _, tt := range tests {
-		if got := RouteJoin(tt.p1, tt.p2); got != tt.expected {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, RouteJoin(tt.p1, tt.p2))
 	}
 }

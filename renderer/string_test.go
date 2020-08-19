@@ -8,20 +8,19 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 var (
-	testErrorFormat = "got `%v`, expect `%v`"
-	timeFormat      = http.TimeFormat
+	timeFormat = http.TimeFormat
 )
 
 func TestString_RenderHeader(t *testing.T) {
 	w := httptest.NewRecorder()
 	renderer := String{"hi"}
 	renderer.RenderHeader(w, nil)
-	if got := w.Header().Get("Content-Type"); got != plainContentType {
-		t.Errorf(testErrorFormat, got, plainContentType)
-	}
+	assert.Equal(t, plainContentType, w.Header().Get("Content-Type"))
 }
 
 func TestString_Render(t *testing.T) {
@@ -36,8 +35,6 @@ func TestString_Render(t *testing.T) {
 		w := httptest.NewRecorder()
 		renderer := String{tt.s}
 		renderer.Render(w, nil)
-		if got := w.Body.String(); got != tt.s {
-			t.Errorf(testErrorFormat, got, tt.s)
-		}
+		assert.Equal(t, tt.s, w.Body.String())
 	}
 }

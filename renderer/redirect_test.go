@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestRedirect_Render(t *testing.T) {
@@ -25,16 +27,15 @@ func TestRedirect_Render(t *testing.T) {
 		{201, "/new/location", req, nil},
 	}
 
+	assert := assert.New(t)
 	for _, tt := range tests {
 		w := httptest.NewRecorder()
 		r := Redirect{tt.code, tt.location}
 		err := r.Render(w, tt.req)
 		if tt.err != nil {
-			if err == nil {
-				t.Errorf(testErrorFormat, nil, "error")
-			}
-		} else if err != nil {
-			t.Errorf(testErrorFormat, err, "nil")
+			assert.NotNil(err)
+		} else {
+			assert.Nil(err)
 		}
 
 		// just for improving test coverage

@@ -7,6 +7,8 @@ package soon
 import (
 	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestResponse_WriteHeader(t *testing.T) {
@@ -23,9 +25,7 @@ func TestResponse_WriteHeader(t *testing.T) {
 		for _, tt := range tests {
 			r := newResponse(httptest.NewRecorder())
 			r.WriteHeader(tt.code)
-			if got := r.Status(); got != tt.expected {
-				t.Errorf(testErrorFormat, got, tt.expected)
-			}
+			assert.Equal(t, tt.expected, r.Status())
 		}
 	})
 
@@ -40,9 +40,7 @@ func TestResponse_WriteHeader(t *testing.T) {
 		})
 		expected := "[SOON-debug] [WARNING] Headers were already written. " +
 			"Wanted to override status code 100 with 200\n"
-		if got != expected {
-			t.Errorf(testErrorFormat, got, expected)
-		}
+		assert.Equal(t, expected, got)
 	})
 }
 
@@ -63,9 +61,7 @@ func TestResponse_WriteHeaderNow(t *testing.T) {
 		r.WriteHeaderNow()
 		r.WriteHeader(tt.again)
 		r.WriteHeaderNow()
-		if got := r.ResponseWriter.(*httptest.ResponseRecorder).Code; got != tt.expected {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, r.ResponseWriter.(*httptest.ResponseRecorder).Code)
 	}
 }
 
@@ -80,27 +76,17 @@ func TestResponse_Write(t *testing.T) {
 		{302, []byte("你好"), 6, 302},
 	}
 
+	assert := assert.New(t)
 	for _, tt := range tests {
 		r := newResponse(httptest.NewRecorder())
+		recorder := r.ResponseWriter.(*httptest.ResponseRecorder)
 		r.WriteHeader(tt.code)
 		size, err := r.Write(tt.data)
-		if err != nil {
-			t.Error(err)
-		} else {
-			if got := r.Status(); got != tt.expectedCode {
-				t.Errorf(testErrorFormat, got, tt.expectedCode)
-			}
-			recorder := r.ResponseWriter.(*httptest.ResponseRecorder)
-			if got := recorder.Code; got != tt.expectedCode {
-				t.Errorf(testErrorFormat, got, tt.expectedCode)
-			}
-			if got := recorder.Body.String(); got != string(tt.data) {
-				t.Errorf(testErrorFormat, got, tt.data)
-			}
-			if size != tt.size {
-				t.Errorf(testErrorFormat, size, tt.size)
-			}
-		}
+		assert.Nil(err)
+		assert.Equal(tt.expectedCode, r.Status())
+		assert.Equal(tt.expectedCode, recorder.Code)
+		assert.Equal(string(tt.data), recorder.Body.String())
+		assert.Equal(tt.size, size)
 	}
 }
 
@@ -115,30 +101,18 @@ func TestResponse_WriteString(t *testing.T) {
 		{302, "你好", 6, 302},
 	}
 
+	assert := assert.New(t)
 	for _, tt := range tests {
 		r := newResponse(httptest.NewRecorder())
 		recorder := r.ResponseWriter.(*httptest.ResponseRecorder)
 		r.WriteHeader(tt.code)
-		if got := recorder.Code; got != 200 {
-			t.Errorf(testErrorFormat, got, 200)
-		}
+		assert.Equal(200, recorder.Code)
 		size, err := r.WriteString(tt.data)
-		if err != nil {
-			t.Error(err)
-		} else {
-			if got := r.Status(); got != tt.expectedCode {
-				t.Errorf(testErrorFormat, got, tt.expectedCode)
-			}
-			if got := recorder.Code; got != tt.expectedCode {
-				t.Errorf(testErrorFormat, got, tt.expectedCode)
-			}
-			if got := recorder.Body.String(); got != tt.data {
-				t.Errorf(testErrorFormat, got, tt.data)
-			}
-			if size != tt.size {
-				t.Errorf(testErrorFormat, size, tt.size)
-			}
-		}
+		assert.Nil(err)
+		assert.Equal(tt.expectedCode, r.Status())
+		assert.Equal(tt.expectedCode, recorder.Code)
+		assert.Equal(tt.data, recorder.Body.String())
+		assert.Equal(tt.size, size)
 	}
 }
 
@@ -151,26 +125,18 @@ func TestResponse_Flush(t *testing.T) {
 		{302, 302},
 	}
 
+	assert := assert.New(t)
 	for _, tt := range tests {
 		r := newResponse(httptest.NewRecorder())
 		recorder := r.ResponseWriter.(*httptest.ResponseRecorder)
 		r.WriteHeader(tt.code)
-		if got := r.Status(); got != tt.expectedCode {
-			t.Errorf(testErrorFormat, got, tt.expectedCode)
-		}
-		if got := recorder.Code; got != 200 {
-			t.Errorf(testErrorFormat, got, 200)
-		}
-		if got := recorder.Flushed; got != false {
-			t.Errorf(testErrorFormat, got, false)
-		}
+		assert.Equal(tt.expectedCode, r.Status())
+		assert.Equal(200, recorder.Code)
+		assert.Equal(false, recorder.Flushed)
+
 		r.Flush()
-		if got := recorder.Code; got != tt.expectedCode {
-			t.Errorf(testErrorFormat, got, tt.expectedCode)
-		}
-		if got := recorder.Flushed; got != true {
-			t.Errorf(testErrorFormat, got, true)
-		}
+		assert.Equal(tt.expectedCode, recorder.Code)
+		assert.Equal(true, recorder.Flushed)
 	}
 }
 
@@ -186,9 +152,7 @@ func TestResponse_Status(t *testing.T) {
 	for _, tt := range tests {
 		r := newResponse(httptest.NewRecorder())
 		r.WriteHeader(tt.code)
-		if got := r.Status(); got != tt.expectedCode {
-			t.Errorf(testErrorFormat, got, tt.expectedCode)
-		}
+		assert.Equal(t, tt.expectedCode, r.Status())
 	}
 }
 
@@ -204,11 +168,8 @@ func TestResponse_Size(t *testing.T) {
 	for _, tt := range tests {
 		r := newResponse(httptest.NewRecorder())
 		_, err := r.WriteString(tt.data)
-		if err != nil {
-			t.Error(err)
-		} else if r.Size() != tt.size {
-			t.Errorf(testErrorFormat, r.Size(), tt.size)
-		}
+		assert.Nil(t, err)
+		assert.Equal(t, tt.size, r.Size())
 	}
 }
 
@@ -224,16 +185,12 @@ func TestResponse_Written(t *testing.T) {
 	for _, tt := range tests {
 		r := newResponse(httptest.NewRecorder())
 		r.WriteHeader(tt.code)
-		if got := r.Written(); got != false {
-			t.Errorf(testErrorFormat, got, false)
-		}
+		assert.Equal(t, false, r.Written())
 		if tt.code > 0 {
 			r.WriteHeaderNow()
 		} else if tt.data != nil {
 			_, _ = r.Write(tt.data)
 		}
-		if got := r.Written(); got != true {
-			t.Errorf(testErrorFormat, got, true)
-		}
+		assert.Equal(t, true, r.Written())
 	}
 }

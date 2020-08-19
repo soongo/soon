@@ -7,8 +7,9 @@ package util
 import (
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestAddHeader(t *testing.T) {
@@ -40,9 +41,7 @@ func TestAddHeader(t *testing.T) {
 	for _, tt := range tests {
 		w := httptest.NewRecorder()
 		AddHeader(w, tt.k, tt.v)
-		if got := w.Header()[tt.k]; !reflect.DeepEqual(got, tt.expected) {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, w.Header()[tt.k])
 	}
 }
 
@@ -92,9 +91,7 @@ func TestSetHeader(t *testing.T) {
 		} else {
 			SetHeader(w, tt.k, tt.v)
 		}
-		if got := w.Header(); !reflect.DeepEqual(got, tt.expected) {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, w.Header())
 	}
 }
 
@@ -114,9 +111,7 @@ func TestSetContentType(t *testing.T) {
 	for _, tt := range tests {
 		w := httptest.NewRecorder()
 		SetContentType(w, tt.contentType)
-		if got := w.Header().Get("Content-Type"); got != tt.expectedContentType {
-			t.Errorf(testErrorFormat, got, tt.expectedContentType)
-		}
+		assert.Equal(t, tt.expectedContentType, w.Header().Get("Content-Type"))
 	}
 }
 
@@ -132,15 +127,14 @@ func TestVary(t *testing.T) {
 		{"Accept-Encoding, Host", []string{"Accept-Encoding", "Host"}, "Accept-Encoding, Host"},
 		{"Accept-Encoding, Host", []string{"Host", "User-Agent"}, "Accept-Encoding, Host, User-Agent"},
 	}
+
 	key := "Vary"
 	for _, tt := range tests {
 		w := httptest.NewRecorder()
 		w.Header().Set(key, tt.vary)
 		Vary(w, tt.fields)
 		result := w.Header().Get(key)
-		if result != tt.expected {
-			t.Errorf(testErrorFormat, result, tt.expected)
-		}
+		assert.Equal(t, tt.expected, result)
 	}
 }
 
@@ -160,10 +154,9 @@ func TestAppendToVaryHeader(t *testing.T) {
 		{"*", []string{"foo"}, "*"},
 		{"foo", []string{"foo", "*"}, "*"},
 	}
+
 	for _, tt := range tests {
-		if got := AppendToVaryHeader(tt.vary, tt.fields); !reflect.DeepEqual(got, tt.expected) {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, AppendToVaryHeader(tt.vary, tt.fields))
 	}
 }
 
@@ -177,10 +170,9 @@ func TestParseHeader(t *testing.T) {
 		{" foo, 你好,bar ", []string{"foo", "你好", "bar"}},
 		{" foo,你好 ,bar ", []string{"foo", "你好", "bar"}},
 	}
+
 	for _, tt := range tests {
-		if got := ParseHeader(tt.header); !reflect.DeepEqual(got, tt.expected) {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, ParseHeader(tt.header))
 	}
 }
 
@@ -195,9 +187,7 @@ func TestGetHeaderValues(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		if got := GetHeaderValues(tt.header, k); !reflect.DeepEqual(got, tt.expected) {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, GetHeaderValues(tt.header, k))
 	}
 }
 
@@ -214,8 +204,6 @@ func TestNormalizeType(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		if got := NormalizeType(tt.t); !reflect.DeepEqual(got, tt.expected) {
-			t.Errorf(testErrorFormat, got, tt.expected)
-		}
+		assert.Equal(t, tt.expected, NormalizeType(tt.t))
 	}
 }
