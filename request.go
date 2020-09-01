@@ -75,6 +75,22 @@ func NewRequest(req *http.Request) *Request {
 	return &Request{req, make(Params, 0), make(Locals, 0), ""}
 }
 
+// GetHeader returns value from request headers.
+func (r *Request) GetHeader(key string) string {
+	return r.Header.Get(key)
+}
+
+// ContentType returns the Content-Type HTTP header of request
+func (r *Request) ContentType() string {
+	contentType := strings.TrimSpace(r.GetHeader("Content-Type"))
+	for i, char := range contentType {
+		if char == ' ' || char == ';' {
+			return contentType[:i]
+		}
+	}
+	return contentType
+}
+
 // Accepts checks if the specified content types are acceptable, based on the
 // request’s Accept HTTP header field. The method returns the best match,
 // or if none of the specified content types is acceptable, returns nil (in

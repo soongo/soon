@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/soongo/soon/binding"
 )
 
 // EnvSoonMode indicates environment name for soon mode.
@@ -67,4 +69,21 @@ func SetMode(value string) {
 // Mode returns currently soon mode.
 func Mode() string {
 	return mode
+}
+
+// DisableBindValidation closes the default validator.
+func DisableBindValidation() {
+	binding.Validator = nil
+}
+
+// EnableJsonDecoderUseNumber sets true for binding.EnableDecoderUseNumber to
+// call the UseNumber method on the JSON Decoder instance.
+func EnableJsonDecoderUseNumber() {
+	binding.EnableDecoderUseNumber = true
+}
+
+// EnableJsonDecoderDisallowUnknownFields sets true for binding.EnableDecoderDisallowUnknownFields
+// to call the DisallowUnknownFields method on the JSON Decoder instance.
+func EnableJsonDecoderDisallowUnknownFields() {
+	binding.EnableDecoderDisallowUnknownFields = true
 }

@@ -5,6 +5,7 @@
 package soon
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -18,11 +19,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-
-	"github.com/soongo/soon/util"
+	"github.com/soongo/soon/binding"
 
 	"github.com/soongo/soon/renderer"
+	"github.com/soongo/soon/util"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -33,6 +35,61 @@ var (
 	jsonType   = "application/json; charset=UTF-8"
 	jsonpType  = "text/javascript; charset=UTF-8"
 )
+
+type ErrTooLargeReader struct{}
+
+func (r *ErrTooLargeReader) Read(p []byte) (n int, err error) {
+	panic(bytes.ErrTooLarge)
+}
+
+type jsonChild struct {
+	Name   string `json:"name" validate:"required,min=3"`
+	Age    int    `json:"age" validate:"gte=0,max=150"`
+	Gender string `json:"gender" validate:"oneof=male female"`
+}
+
+type jsonRoot struct {
+	Foo   string    `json:"foo" validate:"required"`
+	Child jsonChild `json:"child"`
+}
+
+var jsonBindTests = []struct {
+	s        jsonRoot
+	json     string
+	errs     []string
+	expected jsonRoot
+}{
+	{
+		json: `{"foo": "FOO", "child": {"name": "matt", "age": 39, "gender": "male"}}`,
+		expected: jsonRoot{
+			Foo:   "FOO",
+			Child: jsonChild{Name: "matt", Age: 39, Gender: "male"},
+		},
+	},
+	{
+		json: `{"foo": "FOO", "child": {"name": "hi", "age": -1, "gender": "x"}}`,
+		expected: jsonRoot{
+			Foo:   "FOO",
+			Child: jsonChild{Name: "hi", Age: -1, Gender: "x"},
+		},
+		errs: []string{
+			"Key: 'jsonRoot.Child.Name' Error:Field validation for 'Name' failed on the 'min' tag",
+			"Key: 'jsonRoot.Child.Age' Error:Field validation for 'Age' failed on the 'gte' tag",
+			"Key: 'jsonRoot.Child.Gender' Error:Field validation for 'Gender' failed on the 'oneof' tag",
+		},
+	},
+	{
+		json: `{"foo": ""}`,
+		expected: jsonRoot{
+			Foo: "",
+		},
+		errs: []string{
+			"Key: 'jsonRoot.Foo' Error:Field validation for 'Foo' failed on the 'required' tag",
+			"Key: 'jsonRoot.Child.Name' Error:Field validation for 'Name' failed on the 'required' tag",
+			"Key: 'jsonRoot.Child.Gender' Error:Field validation for 'Gender' failed on the 'oneof' tag",
+		},
+	},
+}
 
 func TestContext_HeadersSent(t *testing.T) {
 	tests := []struct {
@@ -739,13 +796,118 @@ func TestContext_Format(t *testing.T) {
 	assert := assert.New(t)
 	for i, tt := range tests {
 		path := "/" + strconv.Itoa(i)
-		header := http.Header{"Accept": dotRegexp.Split(tt.accept, -1)}
-		statusCode, _, body, err := request(http.MethodGet, server.URL+path, header)
+		h := http.Header{"Accept": dotRegexp.Split(tt.accept, -1)}
+		statusCode, _, body, err := request(http.MethodGet, server.URL+path, h)
 		body = strings.Trim(body, "\n")
 		assert.Nil(err)
 		assert.Equal(tt.expectedStatus, statusCode)
 		assert.Equal(tt.expectedBody, body)
 	}
+}
+
+func TestContext_BindJSON(t *testing.T) {
+	for _, tt := range jsonBindTests {
+		req := httptest.NewRequest("GET", "/", strings.NewReader(tt.json))
+		c := NewContext(req, httptest.NewRecorder())
+		err := c.BindJSON(&tt.s)
+		if tt.errs == nil {
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, tt.s)
+			var s jsonRoot
+			err = c.BindJSON(&s)
+			require.EqualError(t, err, "EOF")
+		} else {
+			require.Error(t, err)
+			require.EqualError(t, err, strings.Join(tt.errs, "\n"))
+			assert.Equal(t, tt.expected, tt.s)
+		}
+	}
+}
+
+func TestContext_BindWith(t *testing.T) {
+	for _, tt := range jsonBindTests {
+		req := httptest.NewRequest("GET", "/", strings.NewReader(tt.json))
+		c := NewContext(req, httptest.NewRecorder())
+		err := c.BindWith(&tt.s, binding.JSON)
+		if tt.errs == nil {
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, tt.s)
+			var s jsonRoot
+			err = c.BindWith(&s, binding.JSON)
+			require.EqualError(t, err, "EOF")
+		} else {
+			require.Error(t, err)
+			require.EqualError(t, err, strings.Join(tt.errs, "\n"))
+			assert.Equal(t, tt.expected, tt.s)
+		}
+	}
+}
+
+func TestContext_MustBindJSON(t *testing.T) {
+	for _, tt := range jsonBindTests {
+		t.Run("", func(t *testing.T) {
+			if tt.errs != nil {
+				defer func() {
+					err := recover()
+					require.NotNil(t, err)
+					require.IsType(t, &statusError{}, err)
+					statusErr := err.(*statusError)
+					assert.Equal(t, http.StatusBadRequest, statusErr.status())
+					assert.Equal(t, strings.Join(tt.errs, "\n"), statusErr.Error())
+				}()
+			}
+			req := httptest.NewRequest("GET", "/", strings.NewReader(tt.json))
+			c := NewContext(req, httptest.NewRecorder())
+			c.MustBindJSON(&tt.s)
+		})
+	}
+}
+
+func TestContext_MustBindWith(t *testing.T) {
+	for _, tt := range jsonBindTests {
+		t.Run("", func(t *testing.T) {
+			if tt.errs != nil {
+				defer func() {
+					err := recover()
+					require.NotNil(t, err)
+					require.IsType(t, &statusError{}, err)
+					statusErr := err.(*statusError)
+					assert.Equal(t, http.StatusBadRequest, statusErr.status())
+					assert.Equal(t, strings.Join(tt.errs, "\n"), statusErr.Error())
+				}()
+			}
+			req := httptest.NewRequest("GET", "/", strings.NewReader(tt.json))
+			c := NewContext(req, httptest.NewRecorder())
+			c.MustBindWith(&tt.s, binding.JSON)
+		})
+	}
+}
+
+func TestContext_BindBodyWith(t *testing.T) {
+	for _, tt := range jsonBindTests {
+		req := httptest.NewRequest("GET", "/", strings.NewReader(tt.json))
+		c := NewContext(req, httptest.NewRecorder())
+		err := c.BindBodyWith(&tt.s, binding.JSON)
+		if tt.errs == nil {
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, tt.s)
+			var s jsonRoot
+			err = c.BindWith(&s, binding.JSON)
+			require.EqualError(t, err, "EOF")
+			err = c.BindBodyWith(&s, binding.JSON)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, s)
+		} else {
+			require.Error(t, err)
+			require.EqualError(t, err, strings.Join(tt.errs, "\n"))
+			assert.Equal(t, tt.expected, tt.s)
+		}
+	}
+
+	req := httptest.NewRequest("GET", "/", &ErrTooLargeReader{})
+	c := NewContext(req, httptest.NewRecorder())
+	err := c.BindBodyWith(&jsonBindTests[0].s, binding.JSON)
+	require.Equal(t, bytes.ErrTooLarge, err)
 }
 
 func TestContext_String(t *testing.T) {

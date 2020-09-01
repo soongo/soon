@@ -7,6 +7,8 @@ package soon
 import (
 	"testing"
 
+	"github.com/soongo/soon/binding"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -37,4 +39,24 @@ func TestSetMode(t *testing.T) {
 			assert.Equal(t, tt.mode, Mode())
 		}
 	}
+}
+
+func TestDisableBindValidation(t *testing.T) {
+	v := binding.Validator
+	assert.NotNil(t, binding.Validator)
+	DisableBindValidation()
+	assert.Nil(t, binding.Validator)
+	binding.Validator = v
+}
+
+func TestEnableJsonDecoderUseNumber(t *testing.T) {
+	assert.False(t, binding.EnableDecoderUseNumber)
+	EnableJsonDecoderUseNumber()
+	assert.True(t, binding.EnableDecoderUseNumber)
+}
+
+func TestEnableJsonDecoderDisallowUnknownFields(t *testing.T) {
+	assert.False(t, binding.EnableDecoderDisallowUnknownFields)
+	EnableJsonDecoderDisallowUnknownFields()
+	assert.True(t, binding.EnableDecoderDisallowUnknownFields)
 }

@@ -5,7 +5,9 @@
 package soon
 
 import (
+	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -13,9 +15,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/soongo/soon/binding"
+
 	"github.com/soongo/soon/renderer"
 	"github.com/soongo/soon/util"
 )
+
+// BodyBytesKey indicates a default body bytes key.
+const BodyBytesKey = "_soongo/soon/bodybyteskey"
 
 // Context is the most important part of soon.
 // It allows us to pass variables between middleware, manage the flow,
@@ -270,8 +277,54 @@ func (c *Context) Format(m map[string]Handle) {
 		defaultHandler(c)
 	} else {
 		status := http.StatusNotAcceptable
-		c.Next(&statusError{http.StatusText(status), status})
+		c.Next(&statusError{status, errors.New(http.StatusText(status))})
 	}
+}
+
+// BindJSON is a shortcut for c.BindWith(obj, binding.JSON).
+func (c *Context) BindJSON(obj interface{}) error {
+	return c.BindWith(obj, binding.JSON)
+}
+
+// BindWith binds the passed struct pointer using the specified binding engine.
+// See the binding package.
+func (c *Context) BindWith(obj interface{}, b binding.Binding) error {
+	return b.Bind(c.Request.Request, obj)
+}
+
+// MustBindJSON is a shortcut for c.MustBindWith(obj, binding.JSON).
+func (c *Context) MustBindJSON(obj interface{}) {
+	c.MustBindWith(obj, binding.JSON)
+}
+
+// MustBindWith binds the passed struct pointer using the specified binding engine.
+// It will panic with HTTP 400 if any error occurs.
+// See the binding package.
+func (c *Context) MustBindWith(obj interface{}, b binding.Binding) {
+	if err := c.BindWith(obj, b); err != nil {
+		panic(&statusError{http.StatusBadRequest, err})
+	}
+}
+
+// BindBodyWith is similar with BindWith, but it stores the request
+// body into the context, and reuse when it is called again.
+//
+// NOTE: This method reads the body before binding. So you should use
+// BindWith for better performance if you need to call only once.
+func (c *Context) BindBodyWith(obj interface{}, bb binding.BindingBody) (err error) {
+	var body []byte
+	cb := c.Locals().Get(BodyBytesKey)
+	if cbb, ok := cb.([]byte); ok {
+		body = cbb
+	}
+	if body == nil {
+		body, err = ioutil.ReadAll(c.Request.Body)
+		if err != nil {
+			return err
+		}
+		c.Locals().Set(BodyBytesKey, body)
+	}
+	return bb.BindBody(body, obj)
 }
 
 // Send is alias for String method

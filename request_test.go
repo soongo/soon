@@ -65,6 +65,53 @@ func TestParams_MarshalJSON(t *testing.T) {
 	}
 }
 
+func TestRequest_GetHeader(t *testing.T) {
+	tests := []struct {
+		header string
+		value  string
+	}{
+		{"Accept", "text/html"},
+		{"Content-Type", " text/html "},
+		{"Accept", "text/html; "},
+		{"Content-Type", " text/html ; "},
+		{"Accept", " text/html ; text/xml"},
+		{"Content-Type", " "},
+		{"Accept", "     "},
+		{"Content-Type", "     "},
+		{"Accept-Charset", "utf-8, iso-8859-1;q=0.8, utf-7;q=0.2"},
+		{"Accept-Charset", " utf-8, iso-8859-1;q=0.8, utf-7;q=0.2 "},
+		{"Accept-Encoding", "gzip, compress;q=0.8, identity;q=0.2"},
+		{"Accept-Encoding", " gzip, compress;q=0.8, identity;q=0.2 "},
+	}
+	for _, tt := range tests {
+		req := httptest.NewRequest("GET", "/", nil)
+		req.Header.Set(tt.header, tt.value)
+		r := NewRequest(req)
+		assert.Equal(t, tt.value, r.GetHeader(tt.header))
+	}
+}
+
+func TestRequest_ContentType(t *testing.T) {
+	tests := []struct {
+		contentType string
+		expected    string
+	}{
+		{"text/html", "text/html"},
+		{" text/html ", "text/html"},
+		{"text/html; ", "text/html"},
+		{" text/html ; ", "text/html"},
+		{" text/html ; text/xml", "text/html"},
+		{" ", ""},
+		{"     ", ""},
+	}
+	for _, tt := range tests {
+		req := httptest.NewRequest("GET", "/", nil)
+		req.Header.Set("Content-Type", tt.contentType)
+		r := NewRequest(req)
+		assert.Equal(t, tt.expected, r.ContentType())
+	}
+}
+
 func TestRequest_Accepts(t *testing.T) {
 	tests := []struct {
 		accept   []string

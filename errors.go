@@ -10,14 +10,17 @@ type httpError interface {
 }
 
 type statusError struct {
-	text string
 	code int
+	err  error
 }
 
 var _ httpError = &statusError{}
 
 func (e *statusError) Error() string {
-	return e.text
+	if e.err != nil {
+		return e.err.Error()
+	}
+	return ""
 }
 
 func (e *statusError) status() int {
