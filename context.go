@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/soongo/soon/binding"
@@ -34,6 +35,16 @@ type Context struct {
 
 	next func(v ...interface{})
 
+	// Locals contains local variables scoped to the request,
+	// and therefore available during that request / response cycle (if any).
+	//
+	// This property is useful for exposing request-level information such as
+	// the request path name, authenticated user, user settings, and so on.
+	Locals map[string]interface{}
+
+	// This mutex protect locals map
+	mu sync.RWMutex
+
 	// The finished property will be true if `context.End()` has been called.
 	finished bool
 }
@@ -50,14 +61,60 @@ func (c *Context) Next(v ...interface{}) {
 	c.next(v...)
 }
 
+// SetLocal is used to store a new key/value pair in locals for this context.
+// It also lazy initializes c.Locals if it was not used previously.
+func (c *Context) SetLocal(k string, v interface{}) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.Locals == nil {
+		c.Locals = make(map[string]interface{})
+	}
+	c.Locals[k] = v
+}
+
+// SetLocals is used to store multi new key/value pairs in locals for this context.
+// It also lazy initializes c.locals if it was not used previously.
+func (c *Context) SetLocals(m map[string]interface{}) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.Locals == nil {
+		c.Locals = make(map[string]interface{})
+	}
+	for k, v := range m {
+		c.Locals[k] = v
+	}
+}
+
+// GetLocal returns the value for the given key, ie: (value, true).
+// If the value does not exists it returns (nil, false)
+func (c *Context) GetLocal(key string) (value interface{}, exists bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	value, exists = c.Locals[key]
+	return
+}
+
+// MustGetLocal returns the value for the given key if it exists, otherwise it panics.
+func (c *Context) MustGetLocal(key string) interface{} {
+	if value, exists := c.GetLocal(key); exists {
+		return value
+	}
+	panic("Key \"" + key + "\" does not exist in locals map")
+}
+
+// ResetLocals is used to reset and store new key/value pairs in locals for this context.
+func (c *Context) ResetLocals(m map[string]interface{}) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.Locals = make(map[string]interface{})
+	for k, v := range m {
+		c.Locals[k] = v
+	}
+}
+
 // Params is a shortcut method of request's params
 func (c *Context) Params() Params {
 	return c.Request.Params
-}
-
-// Locals is a shortcut method of request's locals
-func (c *Context) Locals() Locals {
-	return c.Request.Locals
 }
 
 // Query is a shortcut method for getting query of request
@@ -313,16 +370,17 @@ func (c *Context) MustBindWith(obj interface{}, b binding.Binding) {
 // BindWith for better performance if you need to call only once.
 func (c *Context) BindBodyWith(obj interface{}, bb binding.BindingBody) (err error) {
 	var body []byte
-	cb := c.Locals().Get(BodyBytesKey)
-	if cbb, ok := cb.([]byte); ok {
-		body = cbb
+	if cb, ok := c.GetLocal(BodyBytesKey); ok {
+		if cbb, ok := cb.([]byte); ok {
+			body = cbb
+		}
 	}
 	if body == nil {
 		body, err = ioutil.ReadAll(c.Request.Body)
 		if err != nil {
 			return err
 		}
-		c.Locals().Set(BodyBytesKey, body)
+		c.SetLocal(BodyBytesKey, body)
 	}
 	return bb.BindBody(body, obj)
 }

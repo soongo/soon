@@ -722,18 +722,18 @@ func TestRouter_Param(t *testing.T) {
 			assert := assert.New(t)
 			router := NewRouter()
 			router.Handle(tt.method, tt.route, func(c *Context) {
-				assert.Equal(tt.paramValue, c.Locals().Get(tt.paramName))
+				assert.Equal(tt.paramValue, c.MustGetLocal(tt.paramName))
 			})
 			if tt.err != nil {
 				router.Use(func(v interface{}, c *Context) {
-					assert.Equal(nil, c.Locals().Get(tt.paramName))
+					assert.Equal(nil, c.MustGetLocal(tt.paramName))
 				})
 			}
-			router.Param(tt.paramName, func(r *Request, s string) {
+			router.Param(tt.paramName, func(c *Context, s string) {
 				if tt.err != nil {
 					panic(tt.err)
 				}
-				r.Locals.Set(tt.paramName, s)
+				c.SetLocal(tt.paramName, s)
 			})
 			server := httptest.NewServer(router)
 			defer server.Close()
@@ -751,8 +751,8 @@ func TestRouter_Param(t *testing.T) {
 		router.GET("/name/:foo", func(c *Context) {
 			c.String("foo")
 		})
-		router.Param("foo", func(r *Request, s string) {
-			r.Locals.Set("foo", s)
+		router.Param("foo", func(c *Context, s string) {
+			c.SetLocal("foo", s)
 			calledCount++
 		})
 		server := httptest.NewServer(router)
@@ -772,23 +772,23 @@ func TestRouter_Param(t *testing.T) {
 		assert := assert.New(t)
 		router, calledCount := NewRouter(), 0
 		router.Use("/:foo", func(c *Context) {
-			assert.Equal("name", c.Locals().Get("foo"))
+			assert.Equal("name", c.MustGetLocal("foo"))
 			c.Next()
 		})
 		router.GET("/name/:foo/:bar", func(c *Context) {
-			assert.Equal("id", c.Locals().Get("foo"))
+			assert.Equal("id", c.MustGetLocal("foo"))
 			c.Next()
 		})
 		router.GET("/name/:foo/:bar", func(c *Context) {
-			assert.Equal("id", c.Locals().Get("foo"))
+			assert.Equal("id", c.MustGetLocal("foo"))
 			c.Next()
 		})
 		router.GET("/name/id/:foo", func(c *Context) {
-			assert.Equal("bar", c.Locals().Get("foo"))
+			assert.Equal("bar", c.MustGetLocal("foo"))
 			c.String("foo")
 		})
-		router.Param("foo", func(r *Request, s string) {
-			r.Locals.Set("foo", s)
+		router.Param("foo", func(c *Context, s string) {
+			c.SetLocal("foo", s)
 			calledCount++
 		})
 		server := httptest.NewServer(router)
@@ -811,7 +811,7 @@ func TestRouter_Param(t *testing.T) {
 			router.GET("/name/:foo", func(c *Context) {
 				c.String("body")
 			})
-			subRouter.Param("foo", func(r *Request, s string) {
+			subRouter.Param("foo", func(c *Context, s string) {
 				calledCount++
 			})
 			router.Use(subRouter)
@@ -828,7 +828,7 @@ func TestRouter_Param(t *testing.T) {
 			subRouter.GET("/name/:foo", func(c *Context) {
 				c.String("body")
 			})
-			subRouter.Param("foo", func(r *Request, s string) {
+			subRouter.Param("foo", func(c *Context, s string) {
 				calledCount++
 			})
 			router.Use(subRouter)
@@ -854,7 +854,7 @@ func TestRouter_Param(t *testing.T) {
 			subRouter.GET("/name/:foo", func(c *Context) {
 				c.String("body")
 			})
-			subRouter.Param("foo", func(r *Request, s string) {
+			subRouter.Param("foo", func(c *Context, s string) {
 				calledCount++
 			})
 			router.Use(subRouter)
@@ -874,7 +874,7 @@ func TestRouter_Param(t *testing.T) {
 			router.GET("/name/:foo", func(c *Context) {
 				c.Next()
 			})
-			router.Param("foo", func(r *Request, s string) {
+			router.Param("foo", func(c *Context, s string) {
 				calledCount++
 			})
 			subRouter.Use("/:foo", func(c *Context) {
@@ -883,7 +883,7 @@ func TestRouter_Param(t *testing.T) {
 			subRouter.GET("/name/:foo", func(c *Context) {
 				c.String("body")
 			})
-			subRouter.Param("foo", func(r *Request, s string) {
+			subRouter.Param("foo", func(c *Context, s string) {
 				calledCount++
 			})
 			router.Use(subRouter)

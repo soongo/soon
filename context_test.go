@@ -137,9 +137,55 @@ func TestContext_Locals(t *testing.T) {
 
 	for _, tt := range tests {
 		c := NewContext(nil, httptest.NewRecorder())
-		c.Locals().Set(tt.k, tt.v)
-		assert.Equal(t, tt.v, c.Locals().Get(tt.k))
+		c.SetLocal(tt.k, tt.v)
+		v, ok := c.GetLocal(tt.k)
+		assert.True(t, ok)
+		assert.Equal(t, tt.v, v)
+		v, ok = c.GetLocal("not_exists_key")
+		assert.False(t, ok)
+		assert.Nil(t, v)
 	}
+
+	t.Run("SetLocals", func(t *testing.T) {
+		c := NewContext(nil, httptest.NewRecorder())
+		locals := map[string]interface{}{"name": "foo", "age": 10}
+		c.SetLocals(locals)
+		assert.Equal(t, locals, c.Locals)
+		assert.Equal(t, locals["name"], c.MustGetLocal("name"))
+		assert.Equal(t, locals["age"], c.MustGetLocal("age"))
+		locals["name"] = "bar"
+		assert.NotEqual(t, locals["name"], c.MustGetLocal("name"))
+	})
+
+	t.Run("MustGetLocal", func(t *testing.T) {
+		defer func() {
+			assert.NotNil(t, recover())
+		}()
+		c := NewContext(nil, httptest.NewRecorder())
+		locals := map[string]interface{}{"name": "foo", "age": 10}
+		c.SetLocals(locals)
+		c.MustGetLocal("not_exists_key")
+	})
+
+	t.Run("ResetLocals", func(t *testing.T) {
+		c := NewContext(nil, httptest.NewRecorder())
+		locals := map[string]interface{}{"name": "foo", "age": 10}
+		c.SetLocals(locals)
+		assert.Equal(t, locals, c.Locals)
+		assert.Equal(t, locals["name"], c.MustGetLocal("name"))
+		assert.Equal(t, locals["age"], c.MustGetLocal("age"))
+		c.ResetLocals(nil)
+		assert.Equal(t, map[string]interface{}{}, c.Locals)
+		assert.Equal(t, 0, len(c.Locals))
+
+		c.ResetLocals(map[string]interface{}{"name": "bar", "gender": "male"})
+		assert.Equal(t, 2, len(c.Locals))
+		assert.Equal(t, "bar", c.MustGetLocal("name"))
+		assert.Equal(t, "male", c.MustGetLocal("gender"))
+		age, ok := c.GetLocal("age")
+		assert.Nil(t, age)
+		assert.False(t, ok)
+	})
 }
 
 func TestContext_Params(t *testing.T) {

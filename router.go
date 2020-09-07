@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/dlclark/regexp2"
 	"github.com/soongo/soon/util"
 
-	"github.com/dlclark/regexp2"
 	pathToRegexp "github.com/soongo/path-to-regexp"
 )
 
@@ -18,7 +18,7 @@ import (
 // http request, and dispatch a context object into the handler.
 type Handle func(*Context)
 
-type paramHandle func(*Request, string)
+type paramHandle func(*Context, string)
 
 // ErrorHandle handles the error generated in route handler, and dispatch error
 // and context objects into the error handler.
@@ -351,7 +351,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 							if paramCalled[n] != v {
 								paramCalled[n] = v
 								for _, h := range handles {
-									h(c.Request, v)
+									h(c, v)
 								}
 							}
 						}
