@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -343,6 +344,29 @@ func (c *Context) BindJSON(obj interface{}) error {
 	return c.BindWith(obj, binding.JSON)
 }
 
+// BindQuery is a shortcut for c.BindWith(obj, binding.Query).
+func (c *Context) BindQuery(obj interface{}) error {
+	return c.BindWith(obj, binding.Query)
+}
+
+// BindHeader is a shortcut for c.BindWith(obj, binding.Header).
+func (c *Context) BindHeader(obj interface{}) error {
+	return c.BindWith(obj, binding.Header)
+}
+
+// BindUri binds the passed struct pointer using binding.Uri.
+func (c *Context) BindUri(obj interface{}) error {
+	m := make(map[string][]string)
+	for k, v := range c.Params() {
+		if s, ok := k.(string); ok {
+			m[s] = []string{v}
+		} else if i, ok := k.(int); ok {
+			m[strconv.Itoa(i)] = []string{v}
+		}
+	}
+	return binding.Uri.BindUri(m, obj)
+}
+
 // BindWith binds the passed struct pointer using the specified binding engine.
 // See the binding package.
 func (c *Context) BindWith(obj interface{}, b binding.Binding) error {
@@ -352,6 +376,25 @@ func (c *Context) BindWith(obj interface{}, b binding.Binding) error {
 // MustBindJSON is a shortcut for c.MustBindWith(obj, binding.JSON).
 func (c *Context) MustBindJSON(obj interface{}) {
 	c.MustBindWith(obj, binding.JSON)
+}
+
+// MustBindQuery is a shortcut for c.MustBindWith(obj, binding.Query).
+func (c *Context) MustBindQuery(obj interface{}) {
+	c.MustBindWith(obj, binding.Query)
+}
+
+// MustBindHeader is a shortcut for c.MustBindWith(obj, binding.Header).
+func (c *Context) MustBindHeader(obj interface{}) {
+	c.MustBindWith(obj, binding.Header)
+}
+
+// MustBindUri binds the passed struct pointer using binding.Uri.
+// It will panic with HTTP 400 if any error occurs.
+// See the binding package.
+func (c *Context) MustBindUri(obj interface{}) {
+	if err := c.BindUri(obj); err != nil {
+		panic(&statusError{http.StatusBadRequest, err})
+	}
 }
 
 // MustBindWith binds the passed struct pointer using the specified binding engine.

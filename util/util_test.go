@@ -5,11 +5,40 @@
 package util
 
 import (
+	"math/rand"
 	"os"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func rawBytesToStr(b []byte) string {
+	return string(b)
+}
+
+func rawStrToBytes(s string) []byte {
+	return []byte(s)
+}
+
+var (
+	testString = "你好中国abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	testBytes  = []byte(testString)
+)
+
+func generateRandomString(n int) string {
+	testStrings := strings.Split(testString, "")
+	rand.Seed(time.Now().UnixNano())
+	str := strings.Builder{}
+	str.Grow(n)
+	for i := 0; i < n; i++ {
+		str.WriteString(testStrings[rand.Intn(len(testStrings))])
+	}
+	return str.String()
+}
 
 func TestStringSlice_Contains(t *testing.T) {
 	arr := StringSlice{"foo", "*", "你好"}
@@ -149,6 +178,45 @@ func TestEncodeURIComponent(t *testing.T) {
 	}
 	for k, v := range tests {
 		assert.Equal(t, v, EncodeURIComponent(k))
+	}
+}
+
+func TestStringToBytes(t *testing.T) {
+	for i := 0; i < 100; i++ {
+		str := generateRandomString(20)
+		require.Equal(t, rawStrToBytes(str), StringToBytes(str))
+	}
+}
+
+func TestBytesToString(t *testing.T) {
+	data := make([]byte, 1024)
+	for i := 0; i < 100; i++ {
+		rand.Read(data)
+		require.Equal(t, rawBytesToStr(data), BytesToString(data))
+	}
+}
+
+func BenchmarkStringToBytes(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		StringToBytes(testString)
+	}
+}
+
+func BenchmarkRawStrToBytes(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		rawStrToBytes(testString)
+	}
+}
+
+func BenchmarkBytesToString(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		BytesToString(testBytes)
+	}
+}
+
+func BenchmarkRawBytesToStr(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		rawBytesToStr(testBytes)
 	}
 }
 

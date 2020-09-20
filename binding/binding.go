@@ -8,6 +8,12 @@ package binding
 
 import "net/http"
 
+// Content-Type MIME of the most common data formats.
+const (
+	MIMEPOSTForm          = "application/x-www-form-urlencoded"
+	MIMEMultipartPOSTForm = "multipart/form-data"
+)
+
 // Binding describes the interface which needs to be implemented for binding the
 // data present in the request such as JSON request body, query parameters or
 // the form POST.
@@ -20,6 +26,12 @@ type Binding interface {
 type BindingBody interface {
 	Binding
 	BindBody([]byte, interface{}) error
+}
+
+// BindingUri adds BindUri method to Binding. BindUri is similar with Bind,
+// but it read the Params.
+type BindingUri interface {
+	BindUri(map[string][]string, interface{}) error
 }
 
 // StructValidator is the minimal interface which needs to be implemented in
@@ -47,7 +59,13 @@ var Validator StructValidator = &defaultValidator{}
 // These implement the Binding interface and can be used to bind the data
 // present in the request to struct instances.
 var (
-	JSON BindingBody = jsonBinding{}
+	JSON          BindingBody = jsonBinding{}
+	Query         Binding     = queryBinding{}
+	Form          Binding     = formBinding{}
+	FormPost      Binding     = formPostBinding{}
+	FormMultipart Binding     = formMultipartBinding{}
+	Uri           BindingUri  = uriBinding{}
+	Header        Binding     = headerBinding{}
 )
 
 func validate(obj interface{}) error {

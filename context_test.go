@@ -870,6 +870,67 @@ func TestContext_BindJSON(t *testing.T) {
 	}
 }
 
+func TestContext_BindQuery(t *testing.T) {
+	req := httptest.NewRequest("POST", "/?foo=bar&bar=foo", bytes.NewBufferString("foo=unused"))
+	w := httptest.NewRecorder()
+	c := NewContext(req, w)
+
+	var obj struct {
+		Foo string `form:"foo"`
+		Bar string `form:"bar"`
+	}
+	assert.NoError(t, c.BindQuery(&obj))
+	assert.Equal(t, "foo", obj.Bar)
+	assert.Equal(t, "bar", obj.Foo)
+	assert.Equal(t, 0, w.Body.Len())
+}
+
+func TestContext_BindHeader(t *testing.T) {
+	req := httptest.NewRequest("POST", "/", nil)
+	w := httptest.NewRecorder()
+	c := NewContext(req, w)
+
+	c.Request.Header.Add("rate", "8000")
+	c.Request.Header.Add("domain", "music")
+	c.Request.Header.Add("limit", "1000")
+
+	var testHeader struct {
+		Rate   int    `header:"Rate"`
+		Domain string `header:"Domain"`
+		Limit  int    `header:"limit"`
+	}
+
+	assert.NoError(t, c.BindHeader(&testHeader))
+	assert.Equal(t, 8000, testHeader.Rate)
+	assert.Equal(t, "music", testHeader.Domain)
+	assert.Equal(t, 1000, testHeader.Limit)
+	assert.Equal(t, 0, w.Body.Len())
+}
+
+func TestContext_BindUri(t *testing.T) {
+	router := NewRouter()
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	type Person struct {
+		Name string `uri:"name" validate:"required"`
+		ID   string `uri:"id" validate:"required"`
+	}
+
+	router.GET("/rest/:name/:id/(.*)", func(c *Context) {
+		var person Person
+		assert.NoError(t, c.BindUri(&person))
+		assert.Equal(t, "foo", person.Name)
+		assert.Equal(t, "001", person.ID)
+		c.String(body200)
+	})
+
+	statusCode, _, body, err := request(http.MethodGet, server.URL+"/rest/foo/001/", nil)
+	require.NoError(t, err)
+	assert.Equal(t, 200, statusCode)
+	assert.Equal(t, body200, body)
+}
+
 func TestContext_BindWith(t *testing.T) {
 	for _, tt := range jsonBindTests {
 		req := httptest.NewRequest("GET", "/", strings.NewReader(tt.json))
@@ -907,6 +968,92 @@ func TestContext_MustBindJSON(t *testing.T) {
 			c.MustBindJSON(&tt.s)
 		})
 	}
+}
+
+func TestContext_MustBindQuery(t *testing.T) {
+	req := httptest.NewRequest("POST", "/?foo=bar&age=-1", bytes.NewBufferString("foo=unused"))
+	w := httptest.NewRecorder()
+	c := NewContext(req, w)
+
+	defer func() {
+		err := recover()
+		require.NotNil(t, err)
+		require.IsType(t, &statusError{}, err)
+		statusErr := err.(*statusError)
+		assert.Equal(t, http.StatusBadRequest, statusErr.status())
+
+		errText := strings.Join([]string{
+			"Key: 'Bar' Error:Field validation for 'Bar' failed on the 'required' tag",
+			"Key: 'Age' Error:Field validation for 'Age' failed on the 'gte' tag",
+		}, "\n")
+		assert.Equal(t, errText, statusErr.Error())
+	}()
+
+	var obj struct {
+		Foo string `form:"foo" validate:"required"`
+		Bar string `form:"bar" validate:"required"`
+		Age int    `form:"age" validate:"required,gte=0"`
+	}
+	c.MustBindQuery(&obj)
+}
+
+func TestContext_MustBindHeader(t *testing.T) {
+	req := httptest.NewRequest("POST", "/", nil)
+	w := httptest.NewRecorder()
+	c := NewContext(req, w)
+
+	c.Request.Header.Add("rate", "-1")
+	c.Request.Header.Add("limit", "2")
+
+	defer func() {
+		err := recover()
+		require.NotNil(t, err)
+		require.IsType(t, &statusError{}, err)
+		statusErr := err.(*statusError)
+		assert.Equal(t, http.StatusBadRequest, statusErr.status())
+
+		errText := strings.Join([]string{
+			"Key: 'Rate' Error:Field validation for 'Rate' failed on the 'gte' tag",
+			"Key: 'Domain' Error:Field validation for 'Domain' failed on the 'required' tag",
+			"Key: 'Limit' Error:Field validation for 'Limit' failed on the 'min' tag",
+		}, "\n")
+		assert.Equal(t, errText, statusErr.Error())
+	}()
+
+	var testHeader struct {
+		Rate   int    `header:"Rate" validate:"gte=0,max=10"`
+		Domain string `header:"Domain" validate:"required"`
+		Limit  int    `header:"limit" validate:"required,min=3"`
+	}
+	c.MustBindHeader(&testHeader)
+}
+
+func TestContext_MustBindUri(t *testing.T) {
+	router := NewRouter()
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	type Person struct {
+		Name string `uri:"name" validate:"required"`
+		ID   string `uri:"id" validate:"required,min=6"`
+	}
+
+	router.GET("/rest/:name/:id", func(c *Context) {
+		var person Person
+		c.MustBindUri(&person)
+		c.String(body200)
+	})
+
+	router.Use(func(err interface{}, c *Context) {
+		require.NotNil(t, err)
+		require.IsType(t, &statusError{}, err)
+		c.Next(err)
+	})
+
+	statusCode, _, body, err := request(http.MethodGet, server.URL+"/rest/foo/100", nil)
+	require.NoError(t, err)
+	assert.Equal(t, 400, statusCode)
+	assert.Equal(t, "Key: 'Person.ID' Error:Field validation for 'ID' failed on the 'min' tag", body)
 }
 
 func TestContext_MustBindWith(t *testing.T) {

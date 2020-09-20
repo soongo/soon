@@ -7,7 +7,9 @@ package util
 import (
 	"net/url"
 	"os"
+	"reflect"
 	"strings"
+	"unsafe"
 )
 
 // StringSlice attaches the methods of Interface to []string.
@@ -82,6 +84,19 @@ func EncodeURIComponent(str string) string {
 	r := url.QueryEscape(str)
 	r = strings.Replace(r, "+", "%20", -1)
 	return r
+}
+
+// StringToBytes converts string to byte slice without a memory allocation.
+func StringToBytes(s string) (b []byte) {
+	sh := *(*reflect.StringHeader)(unsafe.Pointer(&s))
+	bh := (*reflect.SliceHeader)(unsafe.Pointer(&b))
+	bh.Data, bh.Len, bh.Cap = sh.Data, sh.Len, sh.Len
+	return b
+}
+
+// BytesToString converts byte slice to string without a memory allocation.
+func BytesToString(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
 }
 
 // AddPrefixSlash adds a slash to the start of given string
