@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestResponse_WriteHeader(t *testing.T) {
@@ -114,6 +115,23 @@ func TestResponse_WriteString(t *testing.T) {
 		assert.Equal(tt.data, recorder.Body.String())
 		assert.Equal(tt.size, size)
 	}
+}
+
+func TestResponse_Hijack(t *testing.T) {
+	router := NewRouter()
+	router.Use(func(c *Context) {
+		conn, buf, err := c.Writer.Hijack()
+		defer conn.Close()
+		require.NoError(t, err)
+		assert.NotNil(t, conn)
+		assert.NotNil(t, buf)
+		_, err = buf.WriteString(body200)
+		require.NoError(t, err)
+		require.NoError(t, buf.Flush())
+	})
+	server := httptest.NewServer(router)
+	defer server.Close()
+	request("GET", server.URL+"/", nil)
 }
 
 func TestResponse_Flush(t *testing.T) {

@@ -54,6 +54,7 @@ type Context struct {
 func NewContext(r *http.Request, w http.ResponseWriter) *Context {
 	c := &Context{Request: NewRequest(r), response: newResponse(w)}
 	c.Writer = c.response
+	c.Request.writer = c.response
 	return c
 }
 
@@ -153,6 +154,10 @@ func (c *Context) Set(value ...interface{}) {
 	util.SetHeader(c.Writer, value...)
 }
 
+func (c *Context) del(field string) {
+	c.Writer.Header().Del(field)
+}
+
 // Vary adds `field` to Vary. If already present in the Vary set, then
 // this call is simply ignored.
 func (c *Context) Vary(fields ...string) {
@@ -250,7 +255,7 @@ func (c *Context) ClearCookie(cookie *http.Cookie) {
 // Unless the root option is set in the options object, path must be an
 // absolute path to the file.
 func (c *Context) SendFile(filePath string, options *renderer.FileOptions) {
-	c.Render(renderer.File{FilePath: filePath, Options: options})
+	c.Render(&renderer.File{FilePath: filePath, Options: options})
 }
 
 // Download transfers the file at path as an “attachment”. Typically, browsers will
@@ -435,25 +440,25 @@ func (c *Context) Send(s string) {
 
 // String sends a plain text response.
 func (c *Context) String(s string) {
-	c.Render(renderer.String{Data: s})
+	c.Render(&renderer.String{Data: s})
 }
 
 // Json sends a JSON response.
 // This method sends a response (with the correct content-type) that is
 // the parameter converted to a JSON string.
 func (c *Context) Json(v interface{}) {
-	c.Render(renderer.JSON{Data: v})
+	c.Render(&renderer.JSON{Data: v})
 }
 
 // Jsonp sends a JSON response with JSONP support. This method is identical
 // to c.Json(), except that it opts-in to JSONP callback support.
 func (c *Context) Jsonp(v interface{}) {
-	c.Render(renderer.JSONP{Data: v})
+	c.Render(&renderer.JSONP{Data: v})
 }
 
 // Redirect to the given `location` with `status`.
 func (c *Context) Redirect(status int, location string) {
-	c.Render(renderer.Redirect{Code: status, Location: location})
+	c.Render(&renderer.Redirect{Code: status, Location: location})
 }
 
 // sets the common http header.
@@ -468,7 +473,20 @@ func (c *Context) Render(r renderer.Renderer) {
 		c.renderHeader()
 		r.RenderHeader(c.Writer, c.Request.Request)
 
-		if !bodyAllowedForStatus(c.Writer.Status()) {
+		if c.Request.Fresh() {
+			c.Status(304)
+		}
+
+		status := c.Writer.Status()
+
+		// strip irrelevant headers
+		if status == 204 || status == 304 {
+			c.del("Content-Type")
+			c.del("Content-Length")
+			c.del("Transfer-Encoding")
+		}
+
+		if c.Request.Method == http.MethodHead || !bodyAllowedForStatus(status) {
 			c.Writer.WriteHeaderNow()
 			return
 		}
@@ -476,6 +494,8 @@ func (c *Context) Render(r renderer.Renderer) {
 		if err := r.Render(c.Writer, c.Request.Request); err != nil {
 			panic(err)
 		}
+
+		c.finished = true
 	}
 }
 

@@ -48,11 +48,13 @@ type Request struct {
 	// Even if you use a path pattern to load the router,
 	// the baseUrl property returns the matched string, not the pattern(s).
 	BaseUrl string
+
+	writer ResponseWriter
 }
 
 // NewRequest returns an instance of Request object
 func NewRequest(req *http.Request) *Request {
-	return &Request{req, make(Params, 0), ""}
+	return &Request{req, make(Params, 0), "", nil}
 }
 
 // GetHeader returns value from request headers.
@@ -151,6 +153,24 @@ func (r *Request) AcceptsLanguages(languages ...string) []string {
 	}
 
 	return nil
+}
+
+// Fresh checks if the request is fresh, aka Last-Modified and/or the ETag still match.
+func (r *Request) Fresh() bool {
+	// GET or HEAD for weak freshness validation only
+	method := r.Method
+	if http.MethodGet != method && http.MethodHead != method {
+		return false
+	}
+
+	status := r.writer.Status()
+
+	// 2xx or 304 as per rfc2616 14.26
+	if (status >= 200 && status < 300) || 304 == status {
+		return util.Fresh(r.Header, r.writer.Header())
+	}
+
+	return false
 }
 
 // resetParams resets params to empty

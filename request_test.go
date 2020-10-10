@@ -7,11 +7,14 @@ package soon
 import (
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/soongo/negotiator"
+	"github.com/soongo/soon/util"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParams_Get(t *testing.T) {
@@ -293,4 +296,19 @@ func TestRequest_BaseUrl(t *testing.T) {
 			assert.Nil(err)
 		})
 	}
+}
+
+func TestRequest_Fresh(t *testing.T) {
+	t.Run("should return true when the resource is not modified", func(t *testing.T) {
+		router, etag := NewRouter(), `"12345"`
+		router.Use(func(c *Context) {
+			c.Set("ETag", etag)
+			c.Send(strconv.FormatBool(c.Request.Fresh()))
+		})
+		server := httptest.NewServer(router)
+		defer server.Close()
+		status, _, _, err := request("GET", server.URL+"/", http.Header{util.H("if-none-match"): []string{etag}})
+		require.Nil(t, err)
+		assert.Equal(t, http.StatusNotModified, status)
+	})
 }

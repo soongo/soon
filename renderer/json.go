@@ -17,11 +17,11 @@ type JSON struct {
 const jsonContentType = "application/json; charset=UTF-8"
 
 // RenderHeader writes custom headers.
-func (j JSON) RenderHeader(w http.ResponseWriter, _ *http.Request) {
+func (j *JSON) RenderHeader(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", jsonContentType)
 }
 
 // Render writes data with custom ContentType.
-func (j JSON) Render(w http.ResponseWriter, _ *http.Request) error {
+func (j *JSON) Render(w http.ResponseWriter, _ *http.Request) error {
 	return json.NewEncoder(w).Encode(j.Data)
 }

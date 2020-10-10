@@ -10,12 +10,17 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/dlclark/regexp2"
 )
 
 var (
 	charsetRegexp           = regexp.MustCompile(";\\s*charset\\s*=")
 	acceptParamsRegexp      = regexp.MustCompile(" *; *")
 	acceptParamsPartsRegexp = regexp.MustCompile(" *= *")
+
+	// RegExp to check for no-cache token in Cache-Control.
+	noCacheRegexp = regexp2.MustCompile("(?:^|,)\\s*?no-cache\\s*?(?:,|$)", regexp2.None)
 )
 
 // AcceptParams is an object with `.value`, `.quality` and `.params`.
@@ -135,6 +140,65 @@ func AppendToVaryHeader(vary string, fields []string) string {
 	return val
 }
 
+// Fresh check freshness of the response using request and response headers.
+func Fresh(reqHeader, resHeader http.Header) bool {
+	modifiedSince, noneMatch := reqHeader.Get("if-modified-since"), reqHeader.Get("if-none-match")
+
+	// unconditional request
+	if modifiedSince == "" && noneMatch == "" {
+		return false
+	}
+
+	// Always return stale when Cache-Control: no-cache
+	// to support end-to-end reload requests
+	// https://tools.ietf.org/html/rfc2616#section-14.9.4
+	var cacheControl = reqHeader.Get("cache-control")
+	if cacheControl != "" {
+		m, _ := noCacheRegexp.MatchString(cacheControl)
+		if m {
+			return false
+		}
+	}
+
+	// if-none-match
+	if noneMatch != "" && noneMatch != "*" {
+		etag := resHeader.Get("etag")
+		if etag == "" {
+			return false
+		}
+
+		etagStale, matches := true, ParseHeader(noneMatch)
+		for i, length := 0, len(matches); i < length; i++ {
+			match := matches[i]
+			if match == etag || match == "W/"+etag || "W/"+match == etag {
+				etagStale = false
+				break
+			}
+		}
+
+		if etagStale {
+			return false
+		}
+	}
+
+	// if-modified-since
+	if modifiedSince != "" {
+		lastModified, hasError := resHeader.Get("last-modified"), false
+		t1, err := http.ParseTime(lastModified)
+		t2, err2 := http.ParseTime(modifiedSince)
+		if err != nil || err2 != nil {
+			hasError = true
+		}
+
+		modifiedStale := lastModified == "" || hasError || t1.After(t2)
+		if modifiedStale {
+			return false
+		}
+	}
+
+	return true
+}
+
 // ParseHeader parses header with type string into a slice.
 func ParseHeader(header string) []string {
 	start, end, length := 0, 0, len(header)
@@ -179,6 +243,11 @@ func NormalizeType(t string) AcceptParams {
 		return acceptParams(t, 0)
 	}
 	return AcceptParams{Value: LookupMimeType(t)}
+}
+
+// H is an alias function for `textproto.CanonicalMIMEHeaderKey`
+func H(k string) string {
+	return textproto.CanonicalMIMEHeaderKey(k)
 }
 
 // Parse accept params `str` returning an

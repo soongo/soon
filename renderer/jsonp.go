@@ -22,13 +22,13 @@ type JSONP struct {
 }
 
 // RenderHeader writes custom headers.
-func (j JSONP) RenderHeader(w http.ResponseWriter, _ *http.Request) {
+func (j *JSONP) RenderHeader(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Type", jsonpContentType)
 }
 
 // Render writes data with custom ContentType.
-func (j JSONP) Render(w http.ResponseWriter, req *http.Request) error {
+func (j *JSONP) Render(w http.ResponseWriter, req *http.Request) error {
 	bs, err := json.Marshal(j.Data)
 	if err != nil {
 		return err

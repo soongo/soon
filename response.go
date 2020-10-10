@@ -1,11 +1,15 @@
-// Copyright 2019 Guoyao Wu. All rights reserved.
+// Copyright 2014 Manu Martinez-Almeida.
+// Portions copyright 2020 Guoyao Wu.
+// All rights reserved.
 // Use of this source code is governed by a MIT style
 // license that can be found in the LICENSE file.
 
 package soon
 
 import (
+	"bufio"
 	"io"
+	"net"
 	"net/http"
 )
 
@@ -17,6 +21,7 @@ const (
 // ResponseWriter interface
 type ResponseWriter interface {
 	http.ResponseWriter
+	http.Hijacker
 	http.Flusher
 
 	// Returns the HTTP response status code of the current request.
@@ -82,8 +87,8 @@ func (r *response) WriteHeader(statusCode int) {
 // Http header changes After this will not be sent with response.
 func (r *response) WriteHeaderNow() {
 	if !r.Written() {
-		r.size = 0
 		r.ResponseWriter.WriteHeader(r.status)
+		r.size = 0
 		r.headerWritten = true
 	}
 }
@@ -102,6 +107,14 @@ func (r *response) WriteString(s string) (n int, err error) {
 	n, err = io.WriteString(r.ResponseWriter, s)
 	r.size += n
 	return
+}
+
+// Hijack implements the http.Hijacker interface.
+func (r *response) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if r.size < 0 {
+		r.size = 0
+	}
+	return r.ResponseWriter.(http.Hijacker).Hijack()
 }
 
 // Flush implements the http.Flush interface. It will sends the HTTP

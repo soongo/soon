@@ -28,12 +28,13 @@ import (
 )
 
 var (
-	timeFormat = http.TimeFormat
-	dotRegexp  = regexp.MustCompile("\\s*,\\s*")
-	plainType  = "text/plain; charset=UTF-8"
-	htmlType   = "text/html; charset=UTF-8"
-	jsonType   = "application/json; charset=UTF-8"
-	jsonpType  = "text/javascript; charset=UTF-8"
+	timeFormat   = http.TimeFormat
+	dotRegexp    = regexp.MustCompile("\\s*,\\s*")
+	plainType    = "text/plain; charset=UTF-8"
+	htmlType     = "text/html; charset=UTF-8"
+	jsonType     = "application/json; charset=UTF-8"
+	jsonpType    = "text/javascript; charset=UTF-8"
+	emptyRequest = httptest.NewRequest("GET", "/", nil)
 )
 
 type ErrTooLargeReader struct{}
@@ -117,7 +118,7 @@ func TestContext_HeadersSent(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		c := NewContext(nil, httptest.NewRecorder())
+		c := NewContext(emptyRequest, httptest.NewRecorder())
 		tt.handle(c)
 		assert.Equal(t, tt.expected, c.HeadersSent())
 	}
@@ -136,7 +137,7 @@ func TestContext_Locals(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		c := NewContext(nil, httptest.NewRecorder())
+		c := NewContext(emptyRequest, httptest.NewRecorder())
 		c.SetLocal(tt.k, tt.v)
 		v, ok := c.GetLocal(tt.k)
 		assert.True(t, ok)
@@ -147,7 +148,7 @@ func TestContext_Locals(t *testing.T) {
 	}
 
 	t.Run("SetLocals", func(t *testing.T) {
-		c := NewContext(nil, httptest.NewRecorder())
+		c := NewContext(emptyRequest, httptest.NewRecorder())
 		locals := map[string]interface{}{"name": "foo", "age": 10}
 		c.SetLocals(locals)
 		assert.Equal(t, locals, c.Locals)
@@ -161,14 +162,14 @@ func TestContext_Locals(t *testing.T) {
 		defer func() {
 			assert.NotNil(t, recover())
 		}()
-		c := NewContext(nil, httptest.NewRecorder())
+		c := NewContext(emptyRequest, httptest.NewRecorder())
 		locals := map[string]interface{}{"name": "foo", "age": 10}
 		c.SetLocals(locals)
 		c.MustGetLocal("not_exists_key")
 	})
 
 	t.Run("ResetLocals", func(t *testing.T) {
-		c := NewContext(nil, httptest.NewRecorder())
+		c := NewContext(emptyRequest, httptest.NewRecorder())
 		locals := map[string]interface{}{"name": "foo", "age": 10}
 		c.SetLocals(locals)
 		assert.Equal(t, locals, c.Locals)
@@ -255,7 +256,7 @@ func TestContext_Append(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		c := NewContext(nil, httptest.NewRecorder())
+		c := NewContext(emptyRequest, httptest.NewRecorder())
 		c.Append(tt.k, tt.v)
 		assert.Equal(t, tt.expected, c.Writer.Header()[tt.k])
 	}
@@ -300,7 +301,7 @@ func TestContext_Set(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		c := NewContext(nil, httptest.NewRecorder())
+		c := NewContext(emptyRequest, httptest.NewRecorder())
 		c.Writer.Header().Set(k, "text/*")
 		if tt.k == "" {
 			c.Set(tt.v)
@@ -325,7 +326,7 @@ func TestContext_Get(t *testing.T) {
 
 	assert := assert.New(t)
 	for _, tt := range tests {
-		c := NewContext(nil, httptest.NewRecorder())
+		c := NewContext(emptyRequest, httptest.NewRecorder())
 		assert.Equal("", c.Get(tt.k))
 		c.Set(tt.k, tt.v)
 		assert.Equal(tt.expected, c.Get(tt.k))
@@ -346,7 +347,7 @@ func TestContext_Vary(t *testing.T) {
 	}
 	key := "Vary"
 	for _, tt := range tests {
-		c := NewContext(nil, httptest.NewRecorder())
+		c := NewContext(emptyRequest, httptest.NewRecorder())
 		c.Set(key, tt.vary)
 		c.Vary(tt.fields...)
 		assert.Equal(t, tt.expected, c.Get(key))
@@ -365,7 +366,7 @@ func TestContext_Status(t *testing.T) {
 
 	assert := assert.New(t)
 	for _, tt := range tests {
-		c := NewContext(nil, httptest.NewRecorder())
+		c := NewContext(emptyRequest, httptest.NewRecorder())
 		c.Status(tt.code)
 		assert.Equal(tt.code, c.Writer.Status())
 
@@ -387,7 +388,7 @@ func TestContext_SendStatus(t *testing.T) {
 
 	assert := assert.New(t)
 	for _, tt := range tests {
-		c := NewContext(nil, httptest.NewRecorder())
+		c := NewContext(emptyRequest, httptest.NewRecorder())
 		c.SendStatus(tt.code)
 		w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
 		assert.Equal(tt.code, w.Code)
@@ -408,7 +409,7 @@ func TestContext_Type(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		c := NewContext(nil, httptest.NewRecorder())
+		c := NewContext(emptyRequest, httptest.NewRecorder())
 		c.Type(tt.t)
 		assert.Equal(t, tt.expected, c.Get("Content-Type"))
 	}
@@ -442,7 +443,7 @@ func TestContext_Links(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		c := NewContext(nil, httptest.NewRecorder())
+		c := NewContext(emptyRequest, httptest.NewRecorder())
 		c.Set("Link", tt.origin)
 		c.Links(tt.links)
 		got := c.Get("Link")
@@ -464,7 +465,7 @@ func TestContext_Location(t *testing.T) {
 		{location: "back", referrer: "/previous", expected: "/previous"},
 	}
 	for _, tt := range tests {
-		c := NewContext(nil, httptest.NewRecorder())
+		c := NewContext(emptyRequest, httptest.NewRecorder())
 		if tt.expected == "" {
 			tt.expected = util.EncodeURI(strings.Trim(tt.location, " "))
 		}
@@ -488,7 +489,7 @@ func TestContext_Attachment(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		c := NewContext(nil, httptest.NewRecorder())
+		c := NewContext(emptyRequest, httptest.NewRecorder())
 		if tt.none {
 			c.Attachment()
 		} else {
@@ -523,7 +524,7 @@ func TestContext_Cookie(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		c := NewContext(nil, httptest.NewRecorder())
+		c := NewContext(emptyRequest, httptest.NewRecorder())
 		c.Cookie(tt.cookie)
 		assert.Equal(t, tt.expected, c.Get("Set-Cookie"))
 	}
@@ -552,7 +553,7 @@ func TestContext_ClearCookie(t *testing.T) {
 
 	assert := assert.New(t)
 	for _, tt := range tests {
-		c := NewContext(nil, httptest.NewRecorder())
+		c := NewContext(emptyRequest, httptest.NewRecorder())
 		c.Cookie(tt.cookie)
 		assert.Equal(tt.expected[0], c.Get("Set-Cookie"))
 		c.ClearCookie(tt.cookie)
@@ -654,7 +655,7 @@ func TestContext_SendFile(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert := assert.New(t)
-			c := NewContext(nil, httptest.NewRecorder())
+			c := NewContext(emptyRequest, httptest.NewRecorder())
 			w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
 			if tt.deferFn != nil {
 				func() {
@@ -708,7 +709,7 @@ func TestContext_Download(t *testing.T) {
 
 	for _, tt := range tests {
 		assert := assert.New(t)
-		c := NewContext(nil, httptest.NewRecorder())
+		c := NewContext(emptyRequest, httptest.NewRecorder())
 		c.Download(tt.filePath, tt.options)
 		w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
 		assert.Equal(tt.expectedStatus, w.Code)
@@ -735,7 +736,7 @@ func TestContext_End(t *testing.T) {
 				c.Send("foo")
 				c.Send("bar")
 			},
-			"foobar",
+			"foo",
 		},
 		{
 			"with-end",
@@ -746,11 +747,19 @@ func TestContext_End(t *testing.T) {
 			},
 			"foo",
 		},
+		{
+			"with-end-2",
+			func(c *Context) {
+				c.End()
+				c.Send("foo")
+			},
+			"",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := NewContext(nil, httptest.NewRecorder())
+			c := NewContext(emptyRequest, httptest.NewRecorder())
 			tt.handle(c)
 			w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
 			assert.Equal(t, tt.expected, w.Body.String())
@@ -1114,7 +1123,7 @@ func TestContext_String(t *testing.T) {
 
 	assert := assert.New(t)
 	for _, tt := range tests {
-		c := NewContext(nil, httptest.NewRecorder())
+		c := NewContext(emptyRequest, httptest.NewRecorder())
 		c.String(tt.s)
 		w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
 		assert.Equal(tt.expectedStatus, w.Code)
@@ -1178,7 +1187,7 @@ func TestContext_Json(t *testing.T) {
 
 	assert := assert.New(t)
 	for _, tt := range tests {
-		c := NewContext(nil, httptest.NewRecorder())
+		c := NewContext(emptyRequest, httptest.NewRecorder())
 		tt.handle(c)
 		w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
 		assert.Equal(tt.expectedStatus, w.Code)
@@ -1196,7 +1205,7 @@ func TestContext_Jsonp(t *testing.T) {
 		expectedBody        string
 	}{
 		{
-			nil,
+			emptyRequest,
 			func(c *Context) {
 				c.Jsonp(nil)
 			},
@@ -1205,7 +1214,7 @@ func TestContext_Jsonp(t *testing.T) {
 			`/**/ typeof _jsonp_callback_ === 'function' && _jsonp_callback_(null);`,
 		},
 		{
-			nil,
+			emptyRequest,
 			func(c *Context) {
 				c.Jsonp(struct {
 					id   uint32
@@ -1285,8 +1294,8 @@ func TestContext_Redirect(t *testing.T) {
 		expectedBody   string
 		deferFn        func(w *httptest.ResponseRecorder, code int, cType, loc, body string)
 	}{
-		{200, "/foo/bar", "GET", 200, "", "", "", deferFn1},
-		{309, "/foo/bar", "POST", 200, "", "", "", deferFn1},
+		{200, "/foo/bar", "GET", 200, "text/html; charset=utf-8", "/foo/bar", "", deferFn1},
+		{309, "/foo/bar", "POST", 200, "", "/foo/bar", "", deferFn1},
 		{
 			201,
 			"/foo/bar",
@@ -1297,7 +1306,26 @@ func TestContext_Redirect(t *testing.T) {
 			"<a href=\"/foo/bar\">Created</a>.\n\n",
 			deferFn2,
 		},
-		{301, "/foo/bar", "HEAD", 301, "text/html; charset=utf-8", "/foo/bar", "", deferFn2},
+		{
+			301,
+			"/foo/bar",
+			"GET",
+			301,
+			"text/html; charset=utf-8",
+			"/foo/bar",
+			"<a href=\"/foo/bar\">Moved Permanently</a>.\n\n",
+			deferFn2,
+		},
+		{
+			301,
+			"/foo/bar",
+			"HEAD",
+			301,
+			"text/html; charset=utf-8",
+			"/foo/bar",
+			"",
+			deferFn2,
+		},
 		{
 			302,
 			"http://google.com",
@@ -1328,7 +1356,7 @@ func TestContext_Redirect(t *testing.T) {
 
 func TestContext_Render(t *testing.T) {
 	str := "foo"
-	strRenderer := renderer.String{Data: str}
+	strRenderer := &renderer.String{Data: str}
 	tests := []struct {
 		name                string
 		request             *http.Request
@@ -1338,14 +1366,14 @@ func TestContext_Render(t *testing.T) {
 		expectedBody        string
 		deferFn             func(w *httptest.ResponseRecorder, code int, contentType, body string)
 	}{
-		{"string", nil, strRenderer, 200, plainType, str, nil},
-		{"string", nil, strRenderer, 100, plainType, "", nil},
-		{"string", nil, strRenderer, 204, plainType, "", nil},
-		{"string", nil, strRenderer, 304, plainType, "", nil},
+		{"string", emptyRequest, strRenderer, 200, plainType, str, nil},
+		{"string", emptyRequest, strRenderer, 100, plainType, "", nil},
+		{"string", emptyRequest, strRenderer, 204, "", "", nil},
+		{"string", emptyRequest, strRenderer, 304, "", "", nil},
 		{
 			"json",
-			nil,
-			renderer.JSON{Data: struct {
+			emptyRequest,
+			&renderer.JSON{Data: struct {
 				Name      string
 				PageTotal uint16
 			}{"foo", 50}},
@@ -1356,8 +1384,8 @@ func TestContext_Render(t *testing.T) {
 		},
 		{
 			"json-custom",
-			nil,
-			renderer.JSON{Data: struct {
+			emptyRequest,
+			&renderer.JSON{Data: struct {
 				Name      string `json:"name"`
 				PageTotal uint16 `json:"pageTotal"`
 			}{"foo", 50}},
@@ -1368,8 +1396,8 @@ func TestContext_Render(t *testing.T) {
 		},
 		{
 			"json-error",
-			nil,
-			renderer.JSON{Data: func() {}},
+			emptyRequest,
+			&renderer.JSON{Data: func() {}},
 			200,
 			jsonType,
 			"",
@@ -1384,7 +1412,7 @@ func TestContext_Render(t *testing.T) {
 		{
 			"jsonp",
 			httptest.NewRequest("GET", "http://a.com?callback=jsonp12345", nil),
-			renderer.JSONP{Data: struct {
+			&renderer.JSONP{Data: struct {
 				ID   uint32 `json:"id"`
 				Name string `json:"name"`
 			}{1, "x"}},
@@ -1395,8 +1423,8 @@ func TestContext_Render(t *testing.T) {
 		},
 		{
 			"jsonp-error",
-			nil,
-			renderer.JSONP{Data: func() {}},
+			emptyRequest,
+			&renderer.JSONP{Data: func() {}},
 			200,
 			jsonpType,
 			"",
@@ -1411,7 +1439,7 @@ func TestContext_Render(t *testing.T) {
 		{
 			"redirect",
 			httptest.NewRequest("GET", "http://example.com", nil),
-			renderer.Redirect{Code: 301, Location: "http://example.com"},
+			&renderer.Redirect{Code: 301, Location: "http://example.com"},
 			301,
 			"text/html; charset=utf-8",
 			"<a href=\"http://example.com\">Moved Permanently</a>.\n\n",
@@ -1420,16 +1448,16 @@ func TestContext_Render(t *testing.T) {
 		{
 			"redirect-error",
 			httptest.NewRequest("GET", "http://example.com", nil),
-			renderer.Redirect{Code: 200, Location: "http://example.com"},
+			&renderer.Redirect{Code: 200, Location: "http://example.com"},
 			200,
-			"",
+			"text/html; charset=utf-8",
 			"",
 			func(w *httptest.ResponseRecorder, code int, contentType, body string) {
 				err := recover()
 				assert.NotNil(t, err)
 				assert.Equal(t, code, w.Code)
 				assert.Equal(t, contentType, w.Header().Get("Content-Type"))
-				assert.Equal(t, "", w.Header().Get("Location"))
+				assert.Equal(t, "http://example.com", w.Header().Get("Location"))
 				assert.Equal(t, body, w.Body.String())
 			},
 		},
@@ -1451,11 +1479,11 @@ func TestContext_Render(t *testing.T) {
 				assert.Equal(tt.expectedStatus, w.Code)
 				assert.Equal(tt.expectedContentType, c.Get("Content-Type"))
 				expectedBody := tt.expectedBody
-				if _, ok := tt.renderer.(renderer.JSON); ok {
+				if _, ok := tt.renderer.(*renderer.JSON); ok {
 					expectedBody += "\n"
 				}
 				assert.Equal(expectedBody, w.Body.String())
-				if rr, ok := tt.renderer.(renderer.Redirect); ok {
+				if rr, ok := tt.renderer.(*renderer.Redirect); ok {
 					assert.Equal(rr.Location, w.Header().Get("Location"))
 				}
 			}

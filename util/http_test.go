@@ -160,6 +160,235 @@ func TestAppendToVaryHeader(t *testing.T) {
 	}
 }
 
+func TestFresh(t *testing.T) {
+	tests := []struct {
+		desc      string
+		reqHeader http.Header
+		resHeader http.Header
+		expected  bool
+	}{
+		{
+			"when a non-conditional GET is performed, it should be stale",
+			http.Header{},
+			http.Header{},
+			false,
+		},
+		{
+			"when requested with If-None-Match, and ETags match, it should be fresh",
+			http.Header{H("if-none-match"): []string{`"foo"`}},
+			http.Header{H("etag"): []string{`"foo"`}},
+			true,
+		},
+		{
+			"when requested with If-None-Match, and ETags mismatch, it should be stale",
+			http.Header{H("if-none-match"): []string{`"foo"`}},
+			http.Header{H("etag"): []string{`"bar"`}},
+			false,
+		},
+		{
+			"when requested with If-None-Match, and at least one matches, it should be fresh",
+			http.Header{H("if-none-match"): []string{` "bar" , "foo"`}},
+			http.Header{H("etag"): []string{`"foo"`}},
+			true,
+		},
+		{
+			"when requested with If-None-Match, and ETag is missing, it should be stale",
+			http.Header{H("if-none-match"): []string{`"foo"`}},
+			http.Header{},
+			false,
+		},
+		{
+			"when requested with If-None-Match, and ETag is weak, it should be fresh on exact match",
+			http.Header{H("if-none-match"): []string{`W/"foo"`}},
+			http.Header{H("etag"): []string{`W/"foo"`}},
+			true,
+		},
+		{
+			"when requested with If-None-Match, and ETag is weak, it should be fresh on strong match",
+			http.Header{H("if-none-match"): []string{`W/"foo"`}},
+			http.Header{H("etag"): []string{`"foo"`}},
+			true,
+		},
+		{
+			"when requested with If-None-Match, and ETag is strong, it should be fresh on exact match",
+			http.Header{H("if-none-match"): []string{`"foo"`}},
+			http.Header{H("etag"): []string{`"foo"`}},
+			true,
+		},
+		{
+			"when requested with If-None-Match, and ETag is strong, it should be fresh on weak match",
+			http.Header{H("if-none-match"): []string{`"foo"`}},
+			http.Header{H("etag"): []string{`W/"foo"`}},
+			true,
+		},
+		{
+			"when requested with If-None-Match, and * is given, it should be fresh",
+			http.Header{H("if-none-match"): []string{`*`}},
+			http.Header{H("etag"): []string{`"foo"`}},
+			true,
+		},
+		{
+			"when requested with If-None-Match, and * is given, it should get ignored if not only value",
+			http.Header{H("if-none-match"): []string{`*, "bar"`}},
+			http.Header{H("etag"): []string{`"foo"`}},
+			false,
+		},
+		{
+			"when requested with If-Modified-Since, and modified since the date, it should be stale",
+			http.Header{H("if-modified-since"): []string{"Sat, 01 Jan 2000 00:00:00 GMT"}},
+			http.Header{H("last-modified"): []string{"Sat, 01 Jan 2000 01:00:00 GMT"}},
+			false,
+		},
+		{
+			"when requested with If-Modified-Since, and unmodified since the date, it should be fresh",
+			http.Header{H("if-modified-since"): []string{"Sat, 01 Jan 2000 01:00:00 GMT"}},
+			http.Header{H("last-modified"): []string{"Sat, 01 Jan 2000 00:00:00 GMT"}},
+			true,
+		},
+		{
+			"when requested with If-Modified-Since, and Last-Modified is missing, it should be stale",
+			http.Header{H("if-modified-since"): []string{"Sat, 01 Jan 2000 00:00:00 GMT"}},
+			http.Header{},
+			false,
+		},
+		{
+			"when requested with If-Modified-Since, and with invalid If-Modified-Since date, it should be stale",
+			http.Header{H("if-modified-since"): []string{"foo"}},
+			http.Header{H("last-modified"): []string{"Sat, 01 Jan 2000 00:00:00 GMT"}},
+			false,
+		},
+		{
+			"when requested with If-Modified-Since, and with invalid Last-Modified date, it should be stale",
+			http.Header{H("if-modified-since"): []string{"Sat, 01 Jan 2000 00:00:00 GMT"}},
+			http.Header{H("last-modified"): []string{"foo"}},
+			false,
+		},
+		{
+			"when requested with If-Modified-Since and If-None-Match, and both match, it should be fresh",
+			http.Header{
+				H("if-none-match"):     []string{`"foo"`},
+				H("if-modified-since"): []string{"Sat, 01 Jan 2000 01:00:00 GMT"},
+			},
+			http.Header{
+				H("etag"):          []string{`"foo"`},
+				H("last-modified"): []string{"Sat, 01 Jan 2000 00:00:00 GMT"},
+			},
+			true,
+		},
+		{
+			"when requested with If-Modified-Since and If-None-Match, and only ETag matches, it should be stale",
+			http.Header{
+				H("if-none-match"):     []string{`"foo"`},
+				H("if-modified-since"): []string{"Sat, 01 Jan 2000 00:00:00 GMT"},
+			},
+			http.Header{
+				H("etag"):          []string{`"foo"`},
+				H("last-modified"): []string{"Sat, 01 Jan 2000 01:00:00 GMT"},
+			},
+			false,
+		},
+		{
+			"when requested with If-Modified-Since and If-None-Match, and only Last-Modified matches, it should be stale",
+			http.Header{
+				H("if-none-match"):     []string{`"foo"`},
+				H("if-modified-since"): []string{"Sat, 01 Jan 2000 01:00:00 GMT"},
+			},
+			http.Header{
+				H("etag"):          []string{`"bar"`},
+				H("last-modified"): []string{"Sat, 01 Jan 2000 00:00:00 GMT"},
+			},
+			false,
+		},
+		{
+			"when requested with If-Modified-Since and If-None-Match, and none match, it should be stale",
+			http.Header{
+				H("if-none-match"):     []string{`"foo"`},
+				H("if-modified-since"): []string{"Sat, 01 Jan 2000 00:00:00 GMT"},
+			},
+			http.Header{
+				H("etag"):          []string{`"bar"`},
+				H("last-modified"): []string{"Sat, 01 Jan 2000 01:00:00 GMT"},
+			},
+			false,
+		},
+		{
+			"when requested with Cache-Control: no-cache, it should be stale",
+			http.Header{H("cache-control"): []string{" no-cache"}},
+			http.Header{},
+			false,
+		},
+		{
+			"when requested with Cache-Control: no-cache, and ETags match, it should be stale",
+			http.Header{
+				H("cache-control"): []string{" no-cache"},
+				H("if-none-match"): []string{`"foo"`},
+			},
+			http.Header{H("etag"): []string{`"foo"`}},
+			false,
+		},
+		{
+			"when requested with Cache-Control: no-cache, and unmodified since the date, it should be stale",
+			http.Header{
+				H("cache-control"):     []string{" no-cache"},
+				H("if-modified-since"): []string{"Sat, 01 Jan 2000 01:00:00 GMT"},
+			},
+			http.Header{H("last-modified"): []string{"Sat, 01 Jan 2000 00:00:00 GMT"}},
+			false,
+		},
+	}
+
+	for _, tt := range tests {
+		assert.Equal(t, tt.expected, Fresh(tt.reqHeader, tt.resHeader))
+	}
+}
+
+func BenchmarkFresh(b *testing.B) {
+	b.Run("etag", func(b *testing.B) {
+		b.Run("star", func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				Fresh(
+					http.Header{H("if-none-match"): []string{`"*"`}},
+					http.Header{H("etag"): []string{`"foo"`}},
+				)
+			}
+		})
+		b.Run("single etag", func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				Fresh(
+					http.Header{H("if-none-match"): []string{`"foo"`}},
+					http.Header{H("etag"): []string{`"foo"`}},
+				)
+			}
+		})
+		b.Run("several etags", func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				Fresh(
+					http.Header{H("if-none-match"): []string{`"foo", "bar", "fizz", "buzz"`}},
+					http.Header{H("etag"): []string{`"buzz"`}},
+				)
+			}
+		})
+	})
+	b.Run("modified", func(b *testing.B) {
+		b.Run("not modified", func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				Fresh(
+					http.Header{H("if-modified-since"): []string{"Fri, 01 Jan 2010 00:00:00 GMT"}},
+					http.Header{H("last-modified"): []string{"Sat, 01 Jan 2000 00:00:00 GMT"}},
+				)
+			}
+		})
+		b.Run("modified", func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				Fresh(
+					http.Header{H("if-modified-since"): []string{"Mon, 01 Jan 1990 00:00:00 GMT"}},
+					http.Header{H("last-modified"): []string{"Sat, 01 Jan 2000 00:00:00 GMT"}},
+				)
+			}
+		})
+	})
+}
+
 func TestParseHeader(t *testing.T) {
 	tests := []struct {
 		header   string
