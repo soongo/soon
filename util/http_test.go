@@ -436,3 +436,338 @@ func TestNormalizeType(t *testing.T) {
 		assert.Equal(t, tt.expected, NormalizeType(tt.t))
 	}
 }
+
+func TestRequestTypeIs(t *testing.T) {
+	createRequest := func(contentType string, noBody bool) *http.Request {
+		req := httptest.NewRequest("GET", "/", nil)
+		if contentType != "" {
+			req.Header.Set("content-type", contentType)
+		}
+		if !noBody {
+			req.Header.Set("transfer-encoding", "chunked")
+		}
+		return req
+	}
+
+	tests := []struct {
+		desc        string
+		contentType string
+		noBody      bool
+		types       []string
+		expected    string
+	}{
+		{
+			desc:        "should ignore params",
+			contentType: "text/html; charset=utf-8",
+			types:       []string{"text/*"},
+			expected:    "text/html",
+		},
+		{
+			desc:        "should ignore params LWS",
+			contentType: "text/html ; charset=utf-8",
+			types:       []string{"text/*"},
+			expected:    "text/html",
+		},
+		{
+			desc:        "should ignore casing",
+			contentType: "text/HTML",
+			types:       []string{"text/*"},
+			expected:    "text/html",
+		},
+		{
+			desc:        "should fail invalid type",
+			contentType: "text/html**",
+			types:       []string{"text/*"},
+			expected:    "",
+		},
+		{
+			desc:        "should not match invalid type",
+			contentType: "text/html",
+			types:       []string{"text/html/"},
+			expected:    "",
+		},
+		{
+			desc:        "should return empty string when no body is given",
+			contentType: "text/html",
+			noBody:      true,
+			expected:    "",
+		},
+		{
+			desc:        "should return empty string when no body is given",
+			contentType: "text/html",
+			noBody:      true,
+			types:       []string{"image/*"},
+			expected:    "",
+		},
+		{
+			desc:        "should return empty string when no body is given",
+			contentType: "text/html",
+			noBody:      true,
+			types:       []string{"image/*", "text/*"},
+			expected:    "",
+		},
+		{
+			desc:        "should return empty string when no content type is given",
+			contentType: "",
+			expected:    "",
+		},
+		{
+			desc:        "should return empty string when no content type is given",
+			contentType: "",
+			types:       []string{"text/*", "image/*"},
+			expected:    "",
+		},
+		{
+			desc:        "should return the mime type when given no types",
+			contentType: "image/png",
+			expected:    "image/png",
+		},
+		{
+			desc:        "should return the type when given one type",
+			contentType: "image/png",
+			types:       []string{"png"},
+			expected:    "png",
+		},
+		{
+			desc:        "should return the type when given one type",
+			contentType: "image/png",
+			types:       []string{".png"},
+			expected:    ".png",
+		},
+		{
+			desc:        "should return the type when given one type",
+			contentType: "image/png",
+			types:       []string{"image/png"},
+			expected:    "image/png",
+		},
+		{
+			desc:        "should return the type when given one type",
+			contentType: "image/png",
+			types:       []string{"image/*"},
+			expected:    "image/png",
+		},
+		{
+			desc:        "should return the type when given one type",
+			contentType: "image/png",
+			types:       []string{"*/png"},
+			expected:    "image/png",
+		},
+		{
+			desc:        "should return empty string when given one type",
+			contentType: "image/png",
+			types:       []string{"jpeg"},
+			expected:    "",
+		},
+		{
+			desc:        "should return empty string when given one type",
+			contentType: "image/png",
+			types:       []string{".jpeg"},
+			expected:    "",
+		},
+		{
+			desc:        "should return empty string when given one type",
+			contentType: "image/png",
+			types:       []string{"image/jpeg"},
+			expected:    "",
+		},
+		{
+			desc:        "should return empty string when given one type",
+			contentType: "image/png",
+			types:       []string{"text/*"},
+			expected:    "",
+		},
+		{
+			desc:        "should return empty string when given one type",
+			contentType: "image/png",
+			types:       []string{"*/jpeg"},
+			expected:    "",
+		},
+		{
+			desc:        "should return empty string when given one type",
+			contentType: "image/png",
+			types:       []string{"bogus"},
+			expected:    "",
+		},
+		{
+			desc:        "should return empty string when given one type",
+			contentType: "image/png",
+			types:       []string{"something/bogus*"},
+			expected:    "",
+		},
+		{
+			desc:        "should return the first match when given multiple types",
+			contentType: "image/png",
+			types:       []string{"text/*", "image/*"},
+			expected:    "image/png",
+		},
+		{
+			desc:        "should return the first match when given multiple types",
+			contentType: "image/png",
+			types:       []string{"image/*", "text/*"},
+			expected:    "image/png",
+		},
+		{
+			desc:        "should return the first match when given multiple types",
+			contentType: "image/png",
+			types:       []string{"image/*", "image/png"},
+			expected:    "image/png",
+		},
+		{
+			desc:        "should return the first match when given multiple types",
+			contentType: "image/png",
+			types:       []string{"image/png", "image/*"},
+			expected:    "image/png",
+		},
+		{
+			desc:        "should return empty string when given multiple types",
+			contentType: "image/png",
+			types:       []string{"text/*", "application/*"},
+			expected:    "",
+		},
+		{
+			desc:        "should return empty string when given multiple types",
+			contentType: "image/png",
+			types:       []string{"text/html", "text/plain", "application/json"},
+			expected:    "",
+		},
+		{
+			desc:        "should match suffix types when given +suffix",
+			contentType: "application/vnd+json",
+			types:       []string{"+json"},
+			expected:    "application/vnd+json",
+		},
+		{
+			desc:        "should match suffix types when given +suffix",
+			contentType: "application/vnd+json",
+			types:       []string{"application/vnd+json"},
+			expected:    "application/vnd+json",
+		},
+		{
+			desc:        "should match suffix types when given +suffix",
+			contentType: "application/vnd+json",
+			types:       []string{"application/*+json"},
+			expected:    "application/vnd+json",
+		},
+		{
+			desc:        "should match suffix types when given +suffix",
+			contentType: "application/vnd+json",
+			types:       []string{"*/vnd+json"},
+			expected:    "application/vnd+json",
+		},
+		{
+			desc:        "should match suffix types when given +suffix",
+			contentType: "application/vnd+json",
+			types:       []string{"application/json"},
+			expected:    "",
+		},
+		{
+			desc:        "should match suffix types when given +suffix",
+			contentType: "application/vnd+json",
+			types:       []string{"text/*+json"},
+			expected:    "",
+		},
+		{
+			desc:        "should match any content-type when given '*/*'",
+			contentType: "text/html",
+			types:       []string{"*/*"},
+			expected:    "text/html",
+		},
+		{
+			desc:        "should match any content-type when given '*/*'",
+			contentType: "text/xml",
+			types:       []string{"*/*"},
+			expected:    "text/xml",
+		},
+		{
+			desc:        "should match any content-type when given '*/*'",
+			contentType: "application/json",
+			types:       []string{"*/*"},
+			expected:    "application/json",
+		},
+		{
+			desc:        "should match any content-type when given '*/*'",
+			contentType: "application/vnd+json",
+			types:       []string{"*/*"},
+			expected:    "application/vnd+json",
+		},
+		{
+			desc:        "should not match invalid content-type when given '*/*'",
+			contentType: "bogus",
+			types:       []string{"*/*"},
+			expected:    "",
+		},
+		{
+			desc:        "should not match body-less request when given '*/*'",
+			contentType: "text/html",
+			noBody:      true,
+			types:       []string{"*/*"},
+			expected:    "",
+		},
+		{
+			desc:        "should match 'urlencoded' when Content-Type: application/x-www-form-urlencoded",
+			contentType: "application/x-www-form-urlencoded",
+			types:       []string{"urlencoded"},
+			expected:    "urlencoded",
+		},
+		{
+			desc:        "should match 'urlencoded' when Content-Type: application/x-www-form-urlencoded",
+			contentType: "application/x-www-form-urlencoded",
+			types:       []string{"json", "urlencoded"},
+			expected:    "urlencoded",
+		},
+		{
+			desc:        "should match 'urlencoded' when Content-Type: application/x-www-form-urlencoded",
+			contentType: "application/x-www-form-urlencoded",
+			types:       []string{"urlencoded", "json"},
+			expected:    "urlencoded",
+		},
+		{
+			desc:        "should match 'multipart/*' when Content-Type: multipart/form-data",
+			contentType: "multipart/form-data",
+			types:       []string{"multipart/*"},
+			expected:    "multipart/form-data",
+		},
+		{
+			desc:        "should match 'multipart' when Content-Type: multipart/form-data",
+			contentType: "multipart/form-data",
+			types:       []string{"multipart"},
+			expected:    "multipart",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			result := RequestTypeIs(createRequest(tt.contentType, tt.noBody), tt.types...)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestHasBody(t *testing.T) {
+	createRequest := func(contentLength, transferEncoding string) *http.Request {
+		req := httptest.NewRequest("GET", "/", nil)
+		if contentLength != "" {
+			req.Header.Set("content-length", contentLength)
+		}
+		if transferEncoding != "" {
+			req.Header.Set("transfer-encoding", transferEncoding)
+		}
+		return req
+	}
+
+	tests := []struct {
+		desc             string
+		contentLength    string
+		transferEncoding string
+		expected         bool
+	}{
+		{desc: "should indicate body", contentLength: "1", expected: true},
+		{desc: "should be true when 0", contentLength: "0", expected: true},
+		{desc: "should be false when bogus", contentLength: "bogus", expected: false},
+		{desc: "should indicate body", transferEncoding: "chunked", expected: true},
+	}
+
+	for _, tt := range tests {
+		assert.Equal(t, tt.expected, HasBody(createRequest(tt.contentLength, tt.transferEncoding)))
+	}
+}

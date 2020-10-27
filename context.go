@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -112,16 +111,6 @@ func (c *Context) ResetLocals(m map[string]interface{}) {
 	for k, v := range m {
 		c.Locals[k] = v
 	}
-}
-
-// Params is a shortcut method of request's params
-func (c *Context) Params() Params {
-	return c.Request.Params
-}
-
-// Query is a shortcut method for getting query of request
-func (c *Context) Query() url.Values {
-	return c.Request.URL.Query()
 }
 
 // HeadersSent indicates if the response header was already sent.
@@ -362,7 +351,7 @@ func (c *Context) BindHeader(obj interface{}) error {
 // BindUri binds the passed struct pointer using binding.Uri.
 func (c *Context) BindUri(obj interface{}) error {
 	m := make(map[string][]string)
-	for k, v := range c.Params() {
+	for k, v := range c.Request.Params {
 		if s, ok := k.(string); ok {
 			m[s] = []string{v}
 		} else if i, ok := k.(int); ok {

@@ -203,7 +203,7 @@ func TestContext_Params(t *testing.T) {
 		for k, v := range tt.params {
 			c.Request.Params.Set(k, v)
 		}
-		assert.Equal(t, tt.params, c.Params())
+		assert.Equal(t, tt.params, c.Request.Params)
 	}
 }
 
@@ -225,7 +225,7 @@ func TestContext_Query(t *testing.T) {
 	for _, tt := range tests {
 		req := httptest.NewRequest("GET", "/?"+tt.q, nil)
 		c := NewContext(req, nil)
-		assert.Equal(t, tt.expected, c.Query())
+		assert.Equal(t, tt.expected, c.Request.Query)
 	}
 }
 

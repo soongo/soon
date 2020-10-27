@@ -465,38 +465,38 @@ func TestRouter_Params(t *testing.T) {
 			router1 := NewRouter()
 			router1.Use(tt.route1, func(c *Context) {
 				if c.Request.URL.Path == tt.path1 {
-					assert.Equal(tt.middlewareParams1, c.Params())
+					assert.Equal(tt.middlewareParams1, c.Request.Params)
 				}
 				c.Next()
 			})
 			router1.GET(tt.route1, func(c *Context) {
-				assert.Equal(tt.params1, c.Params())
+				assert.Equal(tt.params1, c.Request.Params)
 				c.String(body200)
 			})
 			router2 := NewRouter()
 			router2.Use(tt.route2, func(c *Context) {
 				if c.Request.URL.Path == tt.path2 {
-					assert.Equal(tt.middlewareParams2, c.Params())
+					assert.Equal(tt.middlewareParams2, c.Request.Params)
 				}
 				c.Next()
 			})
 			router2.GET(tt.route2, func(c *Context) {
-				assert.Equal(tt.params2, c.Params())
+				assert.Equal(tt.params2, c.Request.Params)
 				c.String(body200)
 			})
 			router3 := NewRouter()
 			router3.Use(tt.route3, func(c *Context) {
 				if c.Request.URL.Path == tt.path3 {
-					assert.Equal(tt.middlewareParams3, c.Params())
+					assert.Equal(tt.middlewareParams3, c.Request.Params)
 				}
 				c.Next()
 			})
 			router3.Use(func(c *Context) {
-				assert.Equal(tt.params3, c.Params())
+				assert.Equal(tt.params3, c.Request.Params)
 				c.Next()
 			})
 			router3.GET(tt.route3, func(c *Context) {
-				assert.Equal(tt.params3, c.Params())
+				assert.Equal(tt.params3, c.Request.Params)
 				c.String(body200)
 			})
 			router2.Use(tt.route2, router3)
@@ -535,7 +535,7 @@ func TestRouter_Params(t *testing.T) {
 				})
 				router2.Use(tt.route2, func(v interface{}, c *Context) {
 					assert.NotNil(v)
-					assert.Equal(tt.middlewareParams2, c.Params())
+					assert.Equal(tt.middlewareParams2, c.Request.Params)
 					c.SendStatus(500)
 				})
 				router3 := NewRouter()
@@ -544,14 +544,14 @@ func TestRouter_Params(t *testing.T) {
 				})
 				router3.Use(tt.route3, func(v interface{}, c *Context) {
 					assert.NotNil(v)
-					assert.Equal(tt.middlewareParams3, c.Params())
+					assert.Equal(tt.middlewareParams3, c.Request.Params)
 					c.SendStatus(500)
 				})
 				router2.Use(tt.route2, router3)
 				router1.Use(tt.route1, router2)
 				router1.Use(tt.route1, func(v interface{}, c *Context) {
 					assert.NotNil(v)
-					assert.Equal(tt.middlewareParams1, c.Params())
+					assert.Equal(tt.middlewareParams1, c.Request.Params)
 					c.SendStatus(500)
 				})
 

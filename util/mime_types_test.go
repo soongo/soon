@@ -15,6 +15,7 @@ func TestLookupMimeType(t *testing.T) {
 		"examples/test.png": "image/png",
 		".png":              "image/png",
 		"png":               "image/png",
+		"urlencoded":        "application/x-www-form-urlencoded",
 		"examples/test":     "application/octet-stream",
 	}
 

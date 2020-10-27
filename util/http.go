@@ -140,7 +140,7 @@ func AppendToVaryHeader(vary string, fields []string) string {
 	return val
 }
 
-// Fresh check freshness of the response using request and response headers.
+// Fresh checks freshness of the response using request and response headers.
 func Fresh(reqHeader, resHeader http.Header) bool {
 	modifiedSince, noneMatch := reqHeader.Get("if-modified-since"), reqHeader.Get("if-none-match")
 
@@ -240,8 +240,18 @@ func GetHeaderValues(h http.Header, key string) []string {
 // NormalizeType normalizes the given `type`, for example "html" becomes "text/html".
 func NormalizeType(t string) AcceptParams {
 	if strings.Index(t, "/") >= 0 {
-		return acceptParams(t, 0)
+		return acceptParams(t)
 	}
+
+	if t == "multipart" {
+		return acceptParams("multipart/*")
+	}
+
+	if strings.HasPrefix(t, "+") {
+		// "+json" -> "*/*+json" expando
+		return acceptParams("*/*" + t)
+	}
+
 	return AcceptParams{Value: LookupMimeType(t)}
 }
 
@@ -250,9 +260,63 @@ func H(k string) string {
 	return textproto.CanonicalMIMEHeaderKey(k)
 }
 
+func RequestTypeIs(req *http.Request, types ...string) string {
+	if !HasBody(req) {
+		return ""
+	}
+
+	return TypeIs(req.Header.Get("content-type"), types...)
+}
+
+func TypeIs(contentType string, types ...string) string {
+	contentType = strings.ToLower(contentType)
+	if i := strings.Index(contentType, ";"); i != -1 {
+		contentType = contentType[0:i]
+	}
+	contentType = strings.TrimSpace(contentType)
+	_, err := ParseMediaType(contentType)
+	if err != nil {
+		return ""
+	}
+
+	// no types, return the content type
+	if len(types) == 0 {
+		return contentType
+	}
+
+	for _, t := range types {
+		if mimeMatch(NormalizeType(t).Value, contentType) {
+			if t[0] == '+' || strings.Index(t, "*") != -1 {
+				return contentType
+			}
+			return t
+		}
+	}
+
+	// no matches
+	return ""
+}
+
+// HasBody checks if a request has a request body.
+// A request with a body __must__ either have `transfer-encoding`
+// or `content-length` headers set.
+//  http://www.w3.org/Protocols/rfc2616/rfc2616-sec4.html#sec4.3
+func HasBody(req *http.Request) bool {
+	if req.Header.Get("transfer-encoding") != "" {
+		return true
+	}
+
+	contentLength := req.Header.Get("content-length")
+	if _, err := strconv.ParseInt(contentLength, 10, 64); err == nil {
+		return true
+	}
+
+	return false
+}
+
 // Parse accept params `str` returning an
 // object with `.value`, `.quality` and `.params`.
-func acceptParams(str string, index int) AcceptParams {
+func acceptParams(str string) AcceptParams {
 	parts := acceptParamsRegexp.Split(str, -1)
 	ret := AcceptParams{Value: parts[0], Quality: 1}
 
@@ -272,4 +336,38 @@ func acceptParams(str string, index int) AcceptParams {
 	}
 
 	return ret
+}
+
+func mimeMatch(expected, actual string) bool {
+	expectedParts, actualParts := strings.Split(expected, "/"), strings.Split(actual, "/")
+
+	// invalid format
+	if len(actualParts) != 2 || len(expectedParts) != 2 {
+		return false
+	}
+
+	// validate type
+	if expectedParts[0] != "*" && expectedParts[0] != actualParts[0] {
+		return false
+	}
+
+	expectedPart, length := expectedParts[1], len(expectedParts[1])
+	actualPart, actualPartLength := actualParts[1], len(actualParts[1])
+	actualPartStart := Min(actualPartLength, 1-length)
+	if actualPartStart < 0 {
+		actualPartStart = Max(0, actualPartStart+actualPartLength)
+	}
+
+	// validate suffix wildcard
+	if expectedPart[0:Min(2, length)] == "*+" {
+		return length <= actualPartLength+1 &&
+			expectedPart[Min(length, 1):] == actualPart[actualPartStart:]
+	}
+
+	// validate subtype
+	if expectedPart != "*" && expectedPart != actualParts[1] {
+		return false
+	}
+
+	return true
 }

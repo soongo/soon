@@ -254,3 +254,41 @@ func TestRouteJoin(t *testing.T) {
 		assert.Equal(t, tt.expected, RouteJoin(tt.p1, tt.p2))
 	}
 }
+
+func TestMin(t *testing.T) {
+	tests := []struct {
+		x        int
+		y        int
+		expected int
+	}{
+		{0, 1, 0},
+		{1, 0, 0},
+		{1, 1, 1},
+		{-1, 1, -1},
+		{-1, 0, -1},
+		{-1, -2, -2},
+	}
+
+	for _, tt := range tests {
+		assert.Equal(t, tt.expected, Min(tt.x, tt.y))
+	}
+}
+
+func TestMax(t *testing.T) {
+	tests := []struct {
+		x        int
+		y        int
+		expected int
+	}{
+		{0, 1, 1},
+		{1, 0, 1},
+		{1, 1, 1},
+		{-1, 1, 1},
+		{-1, 0, 0},
+		{-1, -2, -1},
+	}
+
+	for _, tt := range tests {
+		assert.Equal(t, tt.expected, Max(tt.x, tt.y))
+	}
+}

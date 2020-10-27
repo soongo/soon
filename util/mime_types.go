@@ -1124,6 +1124,7 @@ var mimeTypes = map[string]string{
 	"tar.gz":                   "application/x-gtar",
 	"tbz2":                     "application/x-gtar",
 	"tar.bz2":                  "application/x-gtar",
+	"urlencoded":               "application/x-www-form-urlencoded",
 }
 
 var charsetUTF8Regexp = regexp.MustCompile("^text/|^application/(javascript|json)")

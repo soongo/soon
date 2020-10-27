@@ -68,7 +68,7 @@ func TestParams_MarshalJSON(t *testing.T) {
 	}
 }
 
-func TestRequest_GetHeader(t *testing.T) {
+func TestRequest_Get(t *testing.T) {
 	tests := []struct {
 		header string
 		value  string
@@ -90,7 +90,7 @@ func TestRequest_GetHeader(t *testing.T) {
 		req := httptest.NewRequest("GET", "/", nil)
 		req.Header.Set(tt.header, tt.value)
 		r := NewRequest(req)
-		assert.Equal(t, tt.value, r.GetHeader(tt.header))
+		assert.Equal(t, tt.value, r.Get(tt.header))
 	}
 }
 
@@ -311,4 +311,164 @@ func TestRequest_Fresh(t *testing.T) {
 		require.Nil(t, err)
 		assert.Equal(t, http.StatusNotModified, status)
 	})
+}
+
+func TestRequest_Is(t *testing.T) {
+	createRequest := func(contentType string) *Request {
+		req := httptest.NewRequest("GET", "/", nil)
+		if contentType != "" {
+			req.Header.Set("content-type", contentType)
+		}
+		req.Header.Set("transfer-encoding", "chunked")
+		return NewRequest(req)
+	}
+
+	tests := []struct {
+		contentType string
+		types       []string
+		expected    string
+	}{
+		{"text/html; charset=utf-8", []string{"html"}, "html"},
+		{"text/html; charset=utf-8", []string{"text/html"}, "text/html"},
+		{"text/html; charset=utf-8", []string{"text/*"}, "text/html"},
+		{"application/json", []string{"json"}, "json"},
+		{"application/json", []string{"application/json"}, "application/json"},
+		{"application/json", []string{"application/*"}, "application/json"},
+		{"application/json", []string{"html"}, ""},
+		{"", []string{"html"}, ""},
+		{"", []string{"*"}, ""},
+	}
+
+	for _, tt := range tests {
+		assert.Equal(t, tt.expected, createRequest(tt.contentType).Is(tt.types...))
+	}
+}
+
+func TestRequest_Range(t *testing.T) {
+	createRequest := func(rangeHeader string) *Request {
+		req := httptest.NewRequest("GET", "/", nil)
+		if rangeHeader != "" {
+			req.Header.Set("range", rangeHeader)
+		}
+		return NewRequest(req)
+	}
+
+	tests := []struct {
+		rangeHeader    string
+		size           int
+		combine        bool
+		expectedRanges util.Ranges
+	}{
+		{
+			rangeHeader: "bytes=0-499",
+			size:        1000,
+			expectedRanges: util.Ranges{
+				Type:   "bytes",
+				Ranges: []*util.Range{{Start: 0, End: 499}},
+			},
+		},
+		{
+			rangeHeader: "bytes=0-499",
+			size:        200,
+			expectedRanges: util.Ranges{
+				Type:   "bytes",
+				Ranges: []*util.Range{{Start: 0, End: 199}},
+			},
+		},
+		{
+			rangeHeader: "bytes=-400",
+			size:        1000,
+			expectedRanges: util.Ranges{
+				Type:   "bytes",
+				Ranges: []*util.Range{{Start: 600, End: 999}},
+			},
+		},
+		{
+			rangeHeader: "bytes=400-",
+			size:        1000,
+			expectedRanges: util.Ranges{
+				Type:   "bytes",
+				Ranges: []*util.Range{{Start: 400, End: 999}},
+			},
+		},
+		{
+			rangeHeader: "bytes=0-",
+			size:        1000,
+			expectedRanges: util.Ranges{
+				Type:   "bytes",
+				Ranges: []*util.Range{{Start: 0, End: 999}},
+			},
+		},
+		{
+			rangeHeader: "bytes=-1",
+			size:        1000,
+			expectedRanges: util.Ranges{
+				Type:   "bytes",
+				Ranges: []*util.Range{{Start: 999, End: 999}},
+			},
+		},
+		{
+			size:        1000,
+			rangeHeader: "bytes=40-80,81-90,-1",
+			expectedRanges: util.Ranges{
+				Type: "bytes",
+				Ranges: []*util.Range{
+					{Start: 40, End: 80},
+					{Start: 81, End: 90},
+					{Start: 999, End: 999},
+				},
+			},
+		},
+		{
+			rangeHeader: "bytes=0-499,1000-,500-999",
+			size:        200,
+			expectedRanges: util.Ranges{
+				Type:   "bytes",
+				Ranges: []*util.Range{{Start: 0, End: 199}},
+			},
+		},
+		{
+			rangeHeader: "items=0-5",
+			size:        1000,
+			expectedRanges: util.Ranges{
+				Type:   "items",
+				Ranges: []*util.Range{{Start: 0, End: 5}},
+			},
+		},
+		{
+			size:        150,
+			rangeHeader: "bytes=0-4,90-99,5-75,100-199,101-102",
+			combine:     true,
+			expectedRanges: util.Ranges{
+				Type: "bytes",
+				Ranges: []*util.Range{
+					{Start: 0, End: 75},
+					{Start: 90, End: 149},
+				},
+			},
+		},
+		{
+			size:        150,
+			rangeHeader: "bytes=-1,20-100,0-1,101-120",
+			combine:     true,
+			expectedRanges: util.Ranges{
+				Type: "bytes",
+				Ranges: []*util.Range{
+					{Start: 149, End: 149},
+					{Start: 20, End: 120},
+					{Start: 0, End: 1},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		ranges, err := createRequest(tt.rangeHeader).Range(tt.size, tt.combine)
+		require.NoError(t, err)
+		assert.Equal(t, tt.expectedRanges.Type, ranges.Type)
+		for i, r := range tt.expectedRanges.Ranges {
+			assert.Equal(t, r.Start, ranges.Ranges[i].Start)
+			assert.Equal(t, r.End, ranges.Ranges[i].End)
+		}
+	}
 }

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/soongo/negotiator"
@@ -49,22 +50,41 @@ type Request struct {
 	// the baseUrl property returns the matched string, not the pattern(s).
 	BaseUrl string
 
+	Hostname string
+	Protocol string
+	Path     string
+	Query    url.Values
+	Secure   bool
+	Xhr      bool
+
 	writer ResponseWriter
 }
 
 // NewRequest returns an instance of Request object
 func NewRequest(req *http.Request) *Request {
-	return &Request{req, make(Params, 0), "", nil}
+	r := &Request{
+		Request:  req,
+		Params:   make(Params, 0),
+		Hostname: req.URL.Host,
+		Protocol: req.URL.Scheme,
+		Path:     req.URL.EscapedPath(),
+		Query:    req.URL.Query(),
+		Secure:   req.URL.Scheme == "https",
+	}
+
+	r.Xhr = strings.ToLower(r.Get("X-Requested-With")) == "xmlhttprequest"
+
+	return r
 }
 
-// GetHeader returns value from request headers.
-func (r *Request) GetHeader(key string) string {
+// Get returns the specified HTTP request header field (case-insensitive match).
+func (r *Request) Get(key string) string {
 	return r.Header.Get(key)
 }
 
 // ContentType returns the Content-Type HTTP header of request
 func (r *Request) ContentType() string {
-	contentType := strings.TrimSpace(r.GetHeader("Content-Type"))
+	contentType := strings.TrimSpace(r.Get("Content-Type"))
 	for i, char := range contentType {
 		if char == ' ' || char == ';' {
 			return contentType[:i]
@@ -171,6 +191,20 @@ func (r *Request) Fresh() bool {
 	}
 
 	return false
+}
+
+// Is checks if the incoming request contains the "Content-Type"
+// header field, and it contains the give mime `type`.
+func (r *Request) Is(types ...string) string {
+	return util.RequestTypeIs(r.Request, types...)
+}
+
+// Range parses `Range` header field, capping to the given `size`.
+//
+// The "combine" argument can be set to `true` and overlapping & adjacent ranges
+// * will be combined into a single range.
+func (r *Request) Range(size int, combine bool) (util.Ranges, error) {
+	return util.RangeParser(size, r.Get("Range"), combine)
 }
 
 // resetParams resets params to empty
