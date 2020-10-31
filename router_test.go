@@ -107,7 +107,7 @@ func TestRouter(t *testing.T) {
 		},
 		{
 			route:        "/HEALTH-check/",
-			routerOption: &RouterOption{true, true},
+			routerOption: &RouterOption{Sensitive: true, Strict: true},
 			path:         "/health-check/",
 			statusCode:   404,
 			body:         body404,
@@ -119,14 +119,14 @@ func TestRouter(t *testing.T) {
 		{route: "/health-check", path: "/health-check/", statusCode: 200, body: body200},
 		{
 			route:        "/health-check",
-			routerOption: &RouterOption{false, true},
+			routerOption: &RouterOption{Sensitive: false, Strict: true},
 			path:         "/health-check/",
 			statusCode:   404,
 			body:         body404,
 		},
 		{
 			route:        "/health-check/",
-			routerOption: &RouterOption{false, true},
+			routerOption: &RouterOption{Sensitive: false, Strict: true},
 			path:         "/health-check/",
 			statusCode:   404,
 			body:         body404,
@@ -205,12 +205,12 @@ func TestRouter(t *testing.T) {
 
 	t.Run("sub-router-with-custom-options", func(t *testing.T) {
 		assert := assert.New(t)
-		router := NewRouter(&RouterOption{true, true})
+		router := NewRouter(&RouterOption{Sensitive: true, Strict: true})
 		router_1 := NewRouter()
 		router_1.GET("/1-a", func(c *Context) {
 			c.String(body200)
 		})
-		router_1_1 := NewRouter(&RouterOption{false, false})
+		router_1_1 := NewRouter(&RouterOption{Sensitive: false, Strict: false})
 		router_1_1.GET("/1-1-a", func(c *Context) {
 			c.String(body200)
 		})
@@ -221,7 +221,7 @@ func TestRouter(t *testing.T) {
 		router_1_1_1.GET("/1-1-1-a/b", func(c *Context) {
 			c.Next()
 		})
-		router_1_1_1_1 := NewRouter(&RouterOption{true, true})
+		router_1_1_1_1 := NewRouter(&RouterOption{Sensitive: true, Strict: true})
 		router_1_1_1_1.GET("/1-1-1-a/b", func(c *Context) {
 			c.String(body200)
 		})
@@ -428,6 +428,7 @@ func TestRouter_Params(t *testing.T) {
 		middlewareParams1 Params
 		middlewareParams2 Params
 		middlewareParams3 Params
+		routeOptions2     *RouterOption
 	}{
 		{
 			"/:foo",
@@ -439,9 +440,25 @@ func TestRouter_Params(t *testing.T) {
 			Params{"foo": "foo"},
 			Params{"bar": "bar"},
 			Params{0: "test"},
-			Params{"foo": "foo", 0: ""},
-			Params{"bar": "bar", 0: ""},
-			Params{0: "test", 1: ""},
+			Params{"foo": "foo"},
+			Params{"bar": "bar"},
+			Params{0: "test"},
+			nil,
+		},
+		{
+			"/:foo",
+			"/:bar",
+			"/(.*)",
+			"/foo",
+			"/foo/bar",
+			"/foo/bar/test",
+			Params{"foo": "foo"},
+			Params{"foo": "foo", "bar": "bar"},
+			Params{0: "test"},
+			Params{"foo": "foo"},
+			Params{"foo": "foo", "bar": "bar"},
+			Params{0: "test"},
+			&RouterOption{MergeParams: true},
 		},
 		{
 			"/:foo",
@@ -453,9 +470,10 @@ func TestRouter_Params(t *testing.T) {
 			Params{"foo": "foo"},
 			Params{0: "bar"},
 			Params{0: "test"},
-			Params{"foo": "foo", 0: ""},
-			Params{0: "bar", 1: ""},
-			Params{0: "test", 1: ""},
+			Params{"foo": "foo"},
+			Params{0: "bar"},
+			Params{0: "test"},
+			nil,
 		},
 	}
 
@@ -473,7 +491,7 @@ func TestRouter_Params(t *testing.T) {
 				assert.Equal(tt.params1, c.Request.Params)
 				c.String(body200)
 			})
-			router2 := NewRouter()
+			router2 := NewRouter(tt.routeOptions2)
 			router2.Use(tt.route2, func(c *Context) {
 				if c.Request.URL.Path == tt.path2 {
 					assert.Equal(tt.middlewareParams2, c.Request.Params)
@@ -484,7 +502,7 @@ func TestRouter_Params(t *testing.T) {
 				assert.Equal(tt.params2, c.Request.Params)
 				c.String(body200)
 			})
-			router3 := NewRouter()
+			router3 := NewRouter(&RouterOption{})
 			router3.Use(tt.route3, func(c *Context) {
 				if c.Request.URL.Path == tt.path3 {
 					assert.Equal(tt.middlewareParams3, c.Request.Params)
@@ -492,7 +510,7 @@ func TestRouter_Params(t *testing.T) {
 				c.Next()
 			})
 			router3.Use(func(c *Context) {
-				assert.Equal(tt.params3, c.Request.Params)
+				assert.Equal(Params{}, c.Request.Params)
 				c.Next()
 			})
 			router3.GET(tt.route3, func(c *Context) {
@@ -529,7 +547,7 @@ func TestRouter_Params(t *testing.T) {
 				router1.GET(tt.route1, func(c *Context) {
 					panic("error")
 				})
-				router2 := NewRouter()
+				router2 := NewRouter(tt.routeOptions2)
 				router2.GET(tt.route2, func(c *Context) {
 					panic("error")
 				})
@@ -538,7 +556,7 @@ func TestRouter_Params(t *testing.T) {
 					assert.Equal(tt.middlewareParams2, c.Request.Params)
 					c.SendStatus(500)
 				})
-				router3 := NewRouter()
+				router3 := NewRouter(&RouterOption{})
 				router3.GET(tt.route3, func(c *Context) {
 					panic("error")
 				})

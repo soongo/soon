@@ -31,6 +31,7 @@ type node struct {
 	regexp         *regexp2.Regexp
 	baseUrlRegexp  *regexp2.Regexp
 	isMiddleware   bool
+	appendWildcard bool
 	handle         Handle
 	errorHandle    ErrorHandle
 	tokens         []pathToRegexp.Token
@@ -58,13 +59,25 @@ func (n *node) initRegexp() {
 }
 
 func (n *node) buildRequestProperties(c *Context, urlPath string) {
-	c.Request.resetParams()
 	match, err := n.regexp.FindStringMatch(urlPath)
-	if err == nil && match != nil && len(n.originalTokens) > 0 {
-		nGroup, nToken := match.GroupCount(), len(n.originalTokens)
-		for i, g := range match.Groups() {
-			if i > 0 && i >= nGroup-nToken {
-				c.Request.Params.Set(n.originalTokens[i-nGroup+nToken].Name, g.String())
+	nGroup := match.GroupCount()
+
+	if n.router.routerOption != nil && n.router.routerOption.MergeParams {
+		if err == nil && match != nil && len(n.tokens) > 0 {
+			for i, g := range match.Groups() {
+				if i > 0 && (!n.appendWildcard || i < nGroup-1) {
+					c.Request.Params.Set(n.tokens[i-1].Name, g.String())
+				}
+			}
+		}
+	} else {
+		c.Request.resetParams()
+		nToken := len(n.originalTokens)
+		if err == nil && match != nil && nToken > 0 {
+			for i, g := range match.Groups() {
+				if i > 0 && (!n.appendWildcard || i < nGroup-1) && i >= nGroup-nToken {
+					c.Request.Params.Set(n.originalTokens[i-nGroup+nToken].Name, g.String())
+				}
 			}
 		}
 	}
@@ -91,6 +104,10 @@ func (n *node) isErrorHandler() bool {
 type RouterOption struct {
 	// When true the regexp will be case sensitive. (default: false)
 	Sensitive bool
+
+	// Preserve the req.params values from the parent router.
+	// If the parent and the child have conflicting param names, the child’s value take precedence.
+	MergeParams bool
 
 	// When true the regexp won't allow an optional trailing delimiter to match. (default: false)
 	Strict bool
@@ -196,25 +213,35 @@ func (r *Router) Use(params ...interface{}) {
 }
 
 func (r *Router) useMiddleware(route string, h Handle) {
-	route = util.RouteJoin(route, "/(.*)")
+	appendWildcard := false
+	if !strings.HasSuffix(route, "/(.*)") && !strings.HasSuffix(route, "/(.*)/") {
+		route = util.RouteJoin(route, "/(.*)")
+		appendWildcard = true
+	}
 	node := &node{
-		route:         route,
-		originalRoute: route,
-		isMiddleware:  true,
-		handle:        h,
-		router:        r,
+		route:          route,
+		originalRoute:  route,
+		isMiddleware:   true,
+		handle:         h,
+		router:         r,
+		appendWildcard: appendWildcard,
 	}
 	node.initRegexp()
 	r.routes = append(r.routes, node)
 }
 
 func (r *Router) useErrorHandle(route string, h ErrorHandle) {
-	route = util.RouteJoin(route, "/(.*)")
+	appendWildcard := false
+	if !strings.HasSuffix(route, "/(.*)") && !strings.HasSuffix(route, "/(.*)/") {
+		route = util.RouteJoin(route, "/(.*)")
+		appendWildcard = true
+	}
 	node := &node{
-		route:         route,
-		originalRoute: route,
-		errorHandle:   h,
-		router:        r,
+		route:          route,
+		originalRoute:  route,
+		errorHandle:    h,
+		router:         r,
+		appendWildcard: appendWildcard,
 	}
 	node.initRegexp()
 	r.routes = append(r.routes, node)
@@ -229,13 +256,14 @@ func (r *Router) mount(mountPoint string, router *Router) {
 		route := util.RouteJoin(mountPoint, v.route)
 		route = util.AddPrefixSlash(strings.TrimSuffix(route, "/"))
 		node := &node{
-			method:        v.method,
-			route:         route,
-			originalRoute: v.originalRoute,
-			isMiddleware:  v.isMiddleware,
-			handle:        v.handle,
-			errorHandle:   v.errorHandle,
-			router:        v.router,
+			method:         v.method,
+			route:          route,
+			originalRoute:  v.originalRoute,
+			isMiddleware:   v.isMiddleware,
+			appendWildcard: v.appendWildcard,
+			handle:         v.handle,
+			errorHandle:    v.errorHandle,
+			router:         v.router,
 		}
 		node.initRegexp()
 		r.routes = append(r.routes, node)
