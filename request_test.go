@@ -241,61 +241,116 @@ func TestRequest_ResetParams(t *testing.T) {
 }
 
 func TestRequest_BaseUrl(t *testing.T) {
-	tests := []struct {
-		route0          string
-		route1          string
-		route2          string
-		expectedBaseUrl string
-		path            string
-	}{
-		{"/", "", "", "", "/"},
-		{"/foo", "/bar", "", "/foo", "/foo/bar"},
-		{"/foo", "/bar", "/test", "/foo/bar", "/foo/bar/test"},
-		{"/:foo", "/:bar", "", "/foo", "/foo/bar"},
-		{"/:foo", "/:bar", "/:test", "/foo/bar", "/foo/bar/test"},
-	}
+	t.Run("nested", func(t *testing.T) {
+		tests := []struct {
+			route0                    string
+			route1                    string
+			route2                    string
+			expectedMiddlewareBaseUrl string
+			expectedBaseUrl           string
+			path                      string
+		}{
+			{"/", "", "", "", "", "/"},
+			{"/", "", "", "", "", "/foo"},
+			{"/", "/foo", "", "/foo", "", "/foo"},
+			{"/:foo", "", "", "/foo", "", "/foo"},
+			{"/foo", "/bar", "", "/foo/bar", "/foo", "/foo/bar"},
+			{"/foo", "/bar", "/test", "/foo/bar/test", "/foo/bar", "/foo/bar/test"},
+			{"/:foo", "/:bar", "", "/foo/bar", "/foo", "/foo/bar"},
+			{"/:foo", "/:bar", "/:test", "/foo/bar/test", "/foo/bar", "/foo/bar/test"},
+			{"/:foo", "/:bar", "/:test", "/foo/bar/test", "/foo/bar", "/foo/bar/test/123"},
+			{"/:foo", "/:bar", "/:test/(.*)", "/foo/bar/test/123", "/foo/bar", "/foo/bar/test/123"},
+		}
 
-	for _, tt := range tests {
-		t.Run("", func(t *testing.T) {
-			assert := assert.New(t)
-			router0 := NewRouter()
-			if tt.route1 != "" {
-				router1 := NewRouter()
-				if tt.route2 != "" {
-					router2 := NewRouter()
-					router2.Use(tt.route2, func(c *Context) {
-						assert.Equal(tt.expectedBaseUrl, c.Request.BaseUrl)
-						c.Next()
-					})
-					router2.GET(tt.route2, func(c *Context) {
-						assert.Equal(tt.expectedBaseUrl, c.Request.BaseUrl)
-					})
-					router1.Use(tt.route1, router2)
+		for _, tt := range tests {
+			t.Run("", func(t *testing.T) {
+				assert := assert.New(t)
+				router0 := NewRouter()
+				if tt.route1 != "" {
+					router1 := NewRouter()
+					if tt.route2 != "" {
+						router2 := NewRouter()
+						router2.Use(tt.route2, func(c *Context) {
+							assert.Equal(tt.expectedMiddlewareBaseUrl, c.Request.BaseUrl)
+							c.Next()
+						})
+						router2.GET(tt.route2, func(c *Context) {
+							assert.Equal(tt.expectedBaseUrl, c.Request.BaseUrl)
+						})
+						router1.Use(tt.route1, router2)
+					} else {
+						router1.Use(tt.route1, func(c *Context) {
+							assert.Equal(tt.expectedMiddlewareBaseUrl, c.Request.BaseUrl)
+							c.Next()
+						})
+						router1.GET(tt.route1, func(c *Context) {
+							assert.Equal(tt.expectedBaseUrl, c.Request.BaseUrl)
+						})
+					}
+					router0.Use(tt.route0, router1)
 				} else {
-					router1.Use(tt.route1, func(c *Context) {
-						assert.Equal(tt.expectedBaseUrl, c.Request.BaseUrl)
+					router0.Use(tt.route0, func(c *Context) {
+						assert.Equal(tt.expectedMiddlewareBaseUrl, c.Request.BaseUrl)
 						c.Next()
 					})
-					router1.GET(tt.route1, func(c *Context) {
+					router0.GET(tt.route0, func(c *Context) {
 						assert.Equal(tt.expectedBaseUrl, c.Request.BaseUrl)
 					})
 				}
-				router0.Use(tt.route0, router1)
-			} else {
-				router0.Use(tt.route0, func(c *Context) {
-					assert.Equal(tt.expectedBaseUrl, c.Request.BaseUrl)
+				server := httptest.NewServer(router0)
+				defer server.Close()
+				_, _, _, err := request("GET", server.URL+tt.path, nil)
+				assert.Nil(err)
+			})
+		}
+	})
+
+	t.Run("parallel", func(t *testing.T) {
+		tests := []struct {
+			middlewareRoute           string
+			route                     string
+			expectedMiddlewareBaseUrl string
+			expectedBaseUrl           string
+			path                      string
+		}{
+			{"/", "/", "", "", "/"},
+			{"/", "/", "", "", "/foo"},
+			{"/", "/foo", "", "", "/foo"},
+			{"/:foo", "/:foo", "/foo", "", "/foo"},
+			{"/foo", "/foo/bar", "/foo", "", "/foo/bar"},
+			{"/foo/bar", "/foo/bar/test", "/foo/bar", "", "/foo/bar/test"},
+			{"/:foo/:bar", "/:foo/:bar", "/foo/bar", "", "/foo/bar"},
+			{"/:foo/:bar", "/:foo/:bar/(.*)", "/foo/bar", "", "/foo/bar/test"},
+			{"/:foo/:bar/:test", "/:foo/:bar/(.*)", "/foo/bar/test", "", "/foo/bar/test"},
+			{"/:foo/:bar/:test/", "/:foo/:bar/(.*)/", "/foo/bar/test", "", "/foo/bar/test"},
+			{"/:foo/:bar/:test/", "/:foo/:bar/(.*)/", "/foo/bar/test", "", "/foo/bar/test/"},
+			{"/:foo/:bar/:test", "/:foo/:bar/(.*)", "/foo/bar/test", "", "/foo/bar/test/123"},
+			{"/(.*)", "/(.*)/", "/foo/bar/test/123", "", "/foo/bar/test/123"},
+			{"/:foo/(.*)", "/:foo/(.*)/", "/foo/bar/test/123", "", "/foo/bar/test/123"},
+			{"/:foo/:bar/(.*)", "/:foo/:bar/(.*)/", "/foo/bar/test/123", "", "/foo/bar/test/123"},
+			{"/:foo/:bar/(.*)", "/:foo/:bar/(.*)/", "/foo/bar/test/123/", "", "/foo/bar/test/123/"},
+			{"/:foo/:bar/(.*)/", "/:foo/:bar/(.*)/", "/foo/bar/test/123/", "", "/foo/bar/test/123/"},
+			{"/:foo/:bar/(.*)", "/:foo/:bar/(.*)/", "/foo/bar/test/123", "", "/foo/bar/test/123"},
+			{"/:foo/:bar/(.*)/", "/:foo/:bar/(.*)/", "/foo/bar/test/123/", "", "/foo/bar/test/123"},
+		}
+
+		for _, tt := range tests {
+			t.Run("", func(t *testing.T) {
+				router := NewRouter()
+				router.Use(tt.middlewareRoute, func(c *Context) {
+					assert.Equal(t, tt.expectedMiddlewareBaseUrl, c.Request.BaseUrl)
 					c.Next()
 				})
-				router0.GET(tt.route0, func(c *Context) {
-					assert.Equal(tt.expectedBaseUrl, c.Request.BaseUrl)
+				router.GET(tt.route, func(c *Context) {
+					assert.Equal(t, tt.expectedBaseUrl, c.Request.BaseUrl)
 				})
-			}
-			server := httptest.NewServer(router0)
-			defer server.Close()
-			_, _, _, err := request("GET", server.URL+tt.path, nil)
-			assert.Nil(err)
-		})
-	}
+				server := httptest.NewServer(router)
+				defer server.Close()
+				_, _, _, err := request("GET", server.URL+tt.path, nil)
+				require.NoError(t, err)
+			})
+		}
+	})
 }
 
 func TestRequest_Fresh(t *testing.T) {

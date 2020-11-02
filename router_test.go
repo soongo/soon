@@ -26,9 +26,9 @@ type test struct {
 	statusCode        int
 	header            header
 	body              string
-	middleware        func(c *Context)
+	middleware        Handle
 	err               interface{}
-	errorHandle       func(v interface{}, c *Context)
+	errorHandle       ErrorHandle
 }
 
 const (

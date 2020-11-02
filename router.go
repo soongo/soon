@@ -45,25 +45,36 @@ func (n *node) initRegexp() {
 		options = n.router.routerOption.toPathToRegexpOption()
 	}
 	n.regexp = pathToRegexp.Must(pathToRegexp.PathToRegexp(n.route, &n.tokens, options))
+	pathToRegexp.Must(pathToRegexp.PathToRegexp(n.originalRoute, &n.originalTokens, options))
+
+	n.baseUrlRegexp = nil
 	baseUrlRoute := strings.TrimSuffix(n.route, n.originalRoute)
+	if n.isMiddleware {
+		baseUrlRoute = n.route
+		if n.appendWildcard {
+			baseUrlRoute = strings.TrimSuffix(n.route, "/(.*)")
+		}
+	}
 	if baseUrlRoute != "" {
 		n.baseUrlRegexp = pathToRegexp.Must(pathToRegexp.PathToRegexp(baseUrlRoute, nil, options))
 		ro := regexp2.None
 		if options == nil || !options.Sensitive {
 			ro = regexp2.IgnoreCase
 		}
-		route := "(" + strings.TrimSuffix(n.baseUrlRegexp.String(), "$") + ")/(.*)"
+		route := "(" + strings.TrimSuffix(n.baseUrlRegexp.String(), "$") + ")"
+		if !n.isMiddleware || n.appendWildcard {
+			route += "/(.*)"
+		}
 		n.baseUrlRegexp = regexp2.MustCompile(route, ro)
 	}
-	pathToRegexp.Must(pathToRegexp.PathToRegexp(n.originalRoute, &n.originalTokens, options))
 }
 
 func (n *node) buildRequestProperties(c *Context, urlPath string) {
 	match, err := n.regexp.FindStringMatch(urlPath)
-	nGroup := match.GroupCount()
 
 	if n.router.routerOption != nil && n.router.routerOption.MergeParams {
 		if err == nil && match != nil && len(n.tokens) > 0 {
+			nGroup := match.GroupCount()
 			for i, g := range match.Groups() {
 				if i > 0 && (!n.appendWildcard || i < nGroup-1) {
 					c.Request.Params.Set(n.tokens[i-1].Name, g.String())
@@ -74,6 +85,7 @@ func (n *node) buildRequestProperties(c *Context, urlPath string) {
 		c.Request.resetParams()
 		nToken := len(n.originalTokens)
 		if err == nil && match != nil && nToken > 0 {
+			nGroup := match.GroupCount()
 			for i, g := range match.Groups() {
 				if i > 0 && (!n.appendWildcard || i < nGroup-1) && i >= nGroup-nToken {
 					c.Request.Params.Set(n.originalTokens[i-nGroup+nToken].Name, g.String())
@@ -195,12 +207,18 @@ func (r *Router) Use(params ...interface{}) {
 		return
 	}
 
-	if m, ok := handle.(func(*Context)); ok {
-		r.useMiddleware(route, m)
+	if h, ok := handle.(func(*Context)); ok {
+		r.useMiddleware(route, h)
+		return
+	} else if h, ok := handle.(Handle); ok {
+		r.useMiddleware(route, h)
 		return
 	}
 
 	if h, ok := handle.(func(interface{}, *Context)); ok {
+		r.useErrorHandle(route, h)
+		return
+	} else if h, ok := handle.(ErrorHandle); ok {
 		r.useErrorHandle(route, h)
 		return
 	}
@@ -319,7 +337,6 @@ func (r *Router) Handle(method, route string, handle Handle) {
 		method:        method,
 		route:         route,
 		originalRoute: route,
-		isMiddleware:  false,
 		handle:        handle,
 		router:        r,
 	}
