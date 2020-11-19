@@ -410,7 +410,7 @@ func TestRequest_Range(t *testing.T) {
 
 	tests := []struct {
 		rangeHeader    string
-		size           int
+		size           int64
 		combine        bool
 		expectedRanges util.Ranges
 	}{

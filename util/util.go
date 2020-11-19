@@ -7,10 +7,33 @@ package util
 import (
 	"net/url"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"unsafe"
 )
+
+var (
+	InitDirnameErr error
+	dirname        string
+)
+
+func init() {
+	executablePath, err := os.Executable()
+	if err == nil {
+		executablePath, err = filepath.EvalSymlinks(executablePath)
+		if err == nil {
+			dirname = filepath.Join(executablePath, "..")
+		}
+	}
+	InitDirnameErr = err
+}
+
+// Dirname returns the directory name of executable file that started
+// the current process.
+func Dirname() (string, error) {
+	return dirname, InitDirnameErr
+}
 
 // StringSlice attaches the methods of Interface to []string.
 type StringSlice []string
@@ -131,4 +154,17 @@ func Max(x, y int) int {
 		return x
 	}
 	return y
+}
+
+// IsFileExist checks if a file is exist
+func IsFileExist(path string) bool {
+	if strings.TrimSpace(path) == "" {
+		return false
+	}
+
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return false
+	}
+
+	return true
 }

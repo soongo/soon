@@ -12,8 +12,8 @@ import (
 )
 
 type Range struct {
-	Start int
-	End   int
+	Start int64
+	End   int64
 	index int
 }
 
@@ -50,11 +50,12 @@ func (r *rangeSorter) Less(i, j int) bool {
 //
 // The "combine" argument can be set to `true` and overlapping & adjacent ranges
 // * will be combined into a single range.
-func RangeParser(size int, str string, combine bool) (Ranges, error) {
+func RangeParser(size int64, str string, combine bool) (Ranges, error) {
+	str = strings.TrimSpace(str)
 	index := strings.Index(str, "=")
 	ranges := Ranges{}
 
-	if index == -1 {
+	if index == -1 || index == len(str)-1 {
 		return ranges, errors.New("malformed header string")
 	}
 
@@ -66,14 +67,10 @@ func RangeParser(size int, str string, combine bool) (Ranges, error) {
 
 	// parse all ranges
 	for i, v := range arr {
+		v = strings.TrimSpace(v)
 		values := strings.Split(v, "-")
-		start, err1 := strconv.Atoi(values[0])
-		end, err2 := strconv.Atoi(values[1])
-
-		// invalid
-		//if err1 != nil && err2 != nil {
-		//	continue
-		//}
+		start, err1 := strconv.ParseInt(values[0], 10, 64)
+		end, err2 := strconv.ParseInt(values[1], 10, 64)
 
 		if err1 != nil {
 			start = size - end

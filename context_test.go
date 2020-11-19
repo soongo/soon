@@ -7,7 +7,6 @@ package soon
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -20,9 +19,9 @@ import (
 	"time"
 
 	"github.com/soongo/soon/binding"
-
 	"github.com/soongo/soon/renderer"
 	"github.com/soongo/soon/util"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -572,8 +571,14 @@ func TestContext_SendFile(t *testing.T) {
 		assert.NotNil(t, err)
 		if e != nil {
 			assert.Equal(t, e, err)
+			if httpErr, ok := e.(HttpError); ok {
+				assert.Equal(t, code, httpErr.Status())
+			} else {
+				assert.Equal(t, code, w.Code)
+			}
+		} else {
+			assert.Equal(t, code, w.Code)
 		}
-		assert.Equal(t, code, w.Code)
 		assert.Empty(t, w.Header()["Content-Type"])
 	}
 
@@ -581,7 +586,7 @@ func TestContext_SendFile(t *testing.T) {
 	tests := []struct {
 		name                string
 		filePath            string
-		options             *renderer.FileOptions
+		options             renderer.FileOptions
 		expectedStatus      int
 		expectedContentType string
 		expectedError       error
@@ -590,7 +595,7 @@ func TestContext_SendFile(t *testing.T) {
 		{
 			"normal-1",
 			path.Join(pwd, "README.md"),
-			nil,
+			renderer.FileOptions{},
 			200,
 			"text/markdown; charset=UTF-8",
 			nil,
@@ -599,7 +604,7 @@ func TestContext_SendFile(t *testing.T) {
 		{
 			"normal-2",
 			path.Join(pwd, "README.md"),
-			&renderer.FileOptions{
+			renderer.FileOptions{
 				MaxAge: &maxAge,
 				Header: map[string]string{
 					"Accept-Charset":  "utf-8",
@@ -611,23 +616,40 @@ func TestContext_SendFile(t *testing.T) {
 			nil,
 			nil,
 		},
-		{"empty-filepath", "", nil, 200, "", nil, deferFn},
+		{"empty-filepath", "", renderer.FileOptions{}, 200, "", nil, deferFn},
 		{
 			"with-root-path",
 			"README.md",
-			&renderer.FileOptions{Root: pwd, LastModifiedDisabled: true},
+			renderer.FileOptions{Root: pwd, LastModifiedDisabled: true},
 			200,
 			"text/markdown; charset=UTF-8",
 			nil,
 			nil,
 		},
-		{"not-root-filepath", "README.md", nil, 200, "", nil, deferFn},
-		{"directory", pwd, nil, 200, "", renderer.ErrIsDir, deferFn},
+		{"not-root-filepath", "README.md", renderer.FileOptions{}, 200, "", nil, deferFn},
+		{
+			"directory",
+			pwd,
+			renderer.FileOptions{Index: renderer.IndexDisabled},
+			400,
+			"",
+			renderer.ErrIsDir,
+			deferFn,
+		},
+		{
+			"custom directory index",
+			pwd,
+			renderer.FileOptions{Index: "README.md"},
+			200,
+			"text/markdown; charset=UTF-8",
+			nil,
+			nil,
+		},
 		{
 			"hidden-default",
 			path.Join(pwd, ".travis.yml"),
-			nil,
-			200,
+			renderer.FileOptions{},
+			404,
 			"",
 			renderer.ErrNotFound,
 			deferFn,
@@ -635,7 +657,7 @@ func TestContext_SendFile(t *testing.T) {
 		{
 			"hidden-allow",
 			path.Join(pwd, ".travis.yml"),
-			&renderer.FileOptions{DotfilesPolicy: renderer.DotfilesPolicyAllow},
+			renderer.FileOptions{DotfilesPolicy: renderer.DotfilesPolicyAllow},
 			200,
 			"text/yaml; charset=UTF-8",
 			nil,
@@ -644,8 +666,8 @@ func TestContext_SendFile(t *testing.T) {
 		{
 			"hidden-deny",
 			path.Join(pwd, ".travis.yml"),
-			&renderer.FileOptions{DotfilesPolicy: renderer.DotfilesPolicyDeny},
-			200,
+			renderer.FileOptions{DotfilesPolicy: renderer.DotfilesPolicyDeny},
+			403,
 			"",
 			renderer.ErrForbidden,
 			deferFn,
@@ -664,29 +686,28 @@ func TestContext_SendFile(t *testing.T) {
 				}()
 			} else {
 				c.SendFile(tt.filePath, tt.options)
-				fileInfo, fileContent := getFileContent(tt.filePath)
+				if tt.options.Index != "" {
+					tt.filePath = path.Join(tt.filePath, tt.options.Index)
+				}
+				fileInfo, fileContent := getFileContent(tt.filePath, nil)
 				lastModified := fileInfo.ModTime().UTC().Format(timeFormat)
 				assert.Equal(tt.expectedStatus, w.Code)
 				assert.Equal(fileContent, w.Body.String())
 				assert.Equal(tt.expectedContentType, c.Get("Content-Type"))
-				if tt.options != nil {
-					if tt.options.MaxAge != nil {
-						cc := fmt.Sprintf("max-age=%.0f", maxAge.Seconds())
-						assert.Equal(cc, c.Get("Cache-Control"))
-					}
-					if tt.options.Header != nil {
-						for k, v := range tt.options.Header {
-							assert.Equal(v, c.Get(k))
-						}
-					}
-					expectedLastModified := lastModified
-					if tt.options.LastModifiedDisabled {
-						expectedLastModified = ""
-					}
-					assert.Equal(expectedLastModified, c.Get("Last-Modified"))
-				} else {
-					assert.Equal(lastModified, c.Get("Last-Modified"))
+				if tt.options.MaxAge != nil {
+					cc := fmt.Sprintf("max-age=%.0f", maxAge.Seconds())
+					assert.Equal(cc, c.Get("Cache-Control"))
 				}
+				if tt.options.Header != nil {
+					for k, v := range tt.options.Header {
+						assert.Equal(v, c.Get(k))
+					}
+				}
+				expectedLastModified := lastModified
+				if tt.options.LastModifiedDisabled {
+					expectedLastModified = ""
+				}
+				assert.Equal(expectedLastModified, c.Get("Last-Modified"))
 			}
 		})
 	}
@@ -700,11 +721,11 @@ func TestContext_Download(t *testing.T) {
 
 	tests := []struct {
 		filePath       string
-		options        *renderer.FileOptions
+		options        renderer.FileOptions
 		expectedStatus int
 	}{
-		{path.Join(pwd, "README.md"), nil, 200},
-		{path.Join(pwd, "README.md"), &renderer.FileOptions{Name: "custom-name"}, 200},
+		{path.Join(pwd, "README.md"), renderer.FileOptions{}, 200},
+		{path.Join(pwd, "README.md"), renderer.FileOptions{Name: "custom-name"}, 200},
 	}
 
 	for _, tt := range tests {
@@ -713,10 +734,10 @@ func TestContext_Download(t *testing.T) {
 		c.Download(tt.filePath, tt.options)
 		w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
 		assert.Equal(tt.expectedStatus, w.Code)
-		fileInfo, fileContent := getFileContent(tt.filePath)
+		fileInfo, fileContent := getFileContent(tt.filePath, nil)
 		assert.Equal(fileContent, w.Body.String())
 		name := fileInfo.Name()
-		if tt.options != nil && tt.options.Name != "" {
+		if tt.options.Name != "" {
 			name = tt.options.Name
 		}
 		contentDisposition := fmt.Sprintf("attachment; filename=\"%s\"", name)
@@ -966,10 +987,9 @@ func TestContext_MustBindJSON(t *testing.T) {
 				defer func() {
 					err := recover()
 					require.NotNil(t, err)
-					require.IsType(t, &statusError{}, err)
-					statusErr := err.(*statusError)
-					assert.Equal(t, http.StatusBadRequest, statusErr.status())
-					assert.Equal(t, strings.Join(tt.errs, "\n"), statusErr.Error())
+					httpErr := err.(HttpError)
+					assert.Equal(t, http.StatusBadRequest, httpErr.Status())
+					assert.Equal(t, strings.Join(tt.errs, "\n"), httpErr.Error())
 				}()
 			}
 			req := httptest.NewRequest("GET", "/", strings.NewReader(tt.json))
@@ -987,15 +1007,14 @@ func TestContext_MustBindQuery(t *testing.T) {
 	defer func() {
 		err := recover()
 		require.NotNil(t, err)
-		require.IsType(t, &statusError{}, err)
-		statusErr := err.(*statusError)
-		assert.Equal(t, http.StatusBadRequest, statusErr.status())
+		httpErr := err.(HttpError)
+		assert.Equal(t, http.StatusBadRequest, httpErr.Status())
 
 		errText := strings.Join([]string{
 			"Key: 'Bar' Error:Field validation for 'Bar' failed on the 'required' tag",
 			"Key: 'Age' Error:Field validation for 'Age' failed on the 'gte' tag",
 		}, "\n")
-		assert.Equal(t, errText, statusErr.Error())
+		assert.Equal(t, errText, httpErr.Error())
 	}()
 
 	var obj struct {
@@ -1017,16 +1036,15 @@ func TestContext_MustBindHeader(t *testing.T) {
 	defer func() {
 		err := recover()
 		require.NotNil(t, err)
-		require.IsType(t, &statusError{}, err)
-		statusErr := err.(*statusError)
-		assert.Equal(t, http.StatusBadRequest, statusErr.status())
+		httpErr := err.(HttpError)
+		assert.Equal(t, http.StatusBadRequest, httpErr.Status())
 
 		errText := strings.Join([]string{
 			"Key: 'Rate' Error:Field validation for 'Rate' failed on the 'gte' tag",
 			"Key: 'Domain' Error:Field validation for 'Domain' failed on the 'required' tag",
 			"Key: 'Limit' Error:Field validation for 'Limit' failed on the 'min' tag",
 		}, "\n")
-		assert.Equal(t, errText, statusErr.Error())
+		assert.Equal(t, errText, httpErr.Error())
 	}()
 
 	var testHeader struct {
@@ -1055,7 +1073,8 @@ func TestContext_MustBindUri(t *testing.T) {
 
 	router.Use(func(err interface{}, c *Context) {
 		require.NotNil(t, err)
-		require.IsType(t, &statusError{}, err)
+		httpErr := err.(HttpError)
+		assert.Equal(t, http.StatusBadRequest, httpErr.Status())
 		c.Next(err)
 	})
 
@@ -1072,10 +1091,9 @@ func TestContext_MustBindWith(t *testing.T) {
 				defer func() {
 					err := recover()
 					require.NotNil(t, err)
-					require.IsType(t, &statusError{}, err)
-					statusErr := err.(*statusError)
-					assert.Equal(t, http.StatusBadRequest, statusErr.status())
-					assert.Equal(t, strings.Join(tt.errs, "\n"), statusErr.Error())
+					httpErr := err.(HttpError)
+					assert.Equal(t, http.StatusBadRequest, httpErr.Status())
+					assert.Equal(t, strings.Join(tt.errs, "\n"), httpErr.Error())
 				}()
 			}
 			req := httptest.NewRequest("GET", "/", strings.NewReader(tt.json))
@@ -1491,20 +1509,26 @@ func TestContext_Render(t *testing.T) {
 	}
 }
 
-func getFileContent(p string) (os.FileInfo, string) {
+func getFileContent(p string, r *util.Range) (os.FileInfo, string) {
 	f, err := os.Open(p)
 	if err != nil {
 		panic(err)
 	}
 
 	defer f.Close()
-
-	bts, err := ioutil.ReadAll(f)
+	fileInfo, err := f.Stat()
 	if err != nil {
 		panic(err)
 	}
 
-	fileInfo, err := f.Stat()
+	start, size := int64(0), fileInfo.Size()
+	if r != nil {
+		start = r.Start
+		size = r.End - r.Start + 1
+	}
+
+	bts := make([]byte, size)
+	_, err = f.ReadAt(bts, start)
 	if err != nil {
 		panic(err)
 	}

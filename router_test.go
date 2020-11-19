@@ -132,6 +132,7 @@ func TestRouter(t *testing.T) {
 			body:         body404,
 		},
 		{route: "/health-check", path: "/health-check", statusCode: 200, body: body200},
+		{route: "health-check", path: "/health-check", statusCode: 200, body: body200},
 	}
 
 	t.Run("one-by-one", func(t *testing.T) {
@@ -211,7 +212,7 @@ func TestRouter(t *testing.T) {
 			c.String(body200)
 		})
 		router_1_1 := NewRouter(&RouterOption{Sensitive: false, Strict: false})
-		router_1_1.GET("/1-1-a", func(c *Context) {
+		router_1_1.GET("1-1-a", func(c *Context) {
 			c.String(body200)
 		})
 		router_1_1_1 := NewRouter()
@@ -279,6 +280,14 @@ func TestRouterMiddleware(t *testing.T) {
 		},
 		{
 			route:      "/foo/:foo",
+			path:       "/foo/foo1",
+			statusCode: 200,
+			middleware: func(c *Context) {
+				c.Send(body200)
+			},
+		},
+		{
+			route:      "foo/:foo",
 			path:       "/foo/foo1",
 			statusCode: 200,
 			middleware: func(c *Context) {
@@ -464,6 +473,21 @@ func TestRouter_Params(t *testing.T) {
 			"/:foo",
 			"/([^/]*)",
 			"/(.*)",
+			"/foo",
+			"/foo/bar",
+			"/foo/bar/test",
+			Params{"foo": "foo"},
+			Params{0: "bar"},
+			Params{0: "test"},
+			Params{"foo": "foo"},
+			Params{0: "bar"},
+			Params{0: "test"},
+			nil,
+		},
+		{
+			":foo",
+			"([^/]*)",
+			"(.*)",
 			"/foo",
 			"/foo/bar",
 			"/foo/bar/test",

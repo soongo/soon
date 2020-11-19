@@ -5,7 +5,6 @@
 package soon
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -15,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/soongo/soon/internal"
 
 	"github.com/soongo/soon/binding"
 
@@ -243,8 +244,12 @@ func (c *Context) ClearCookie(cookie *http.Cookie) {
 // response HTTP header field based on the filename’s extension.
 // Unless the root option is set in the options object, path must be an
 // absolute path to the file.
-func (c *Context) SendFile(filePath string, options *renderer.FileOptions) {
-	c.Render(&renderer.File{FilePath: filePath, Options: options})
+func (c *Context) SendFile(filePath string, options ...renderer.FileOptions) {
+	var opts renderer.FileOptions
+	if len(options) > 0 {
+		opts = options[0]
+	}
+	c.Render(&renderer.File{FilePath: filePath, Options: opts})
 }
 
 // Download transfers the file at path as an “attachment”. Typically, browsers will
@@ -255,19 +260,20 @@ func (c *Context) SendFile(filePath string, options *renderer.FileOptions) {
 // This method uses c.SendFile() to transfer the file. The optional options
 // argument passes through to the underlying c.SendFile() call, and takes the
 // exact same parameters.
-func (c *Context) Download(filePath string, options *renderer.FileOptions) {
+func (c *Context) Download(filePath string, options ...renderer.FileOptions) {
 	name := filepath.Base(filePath)
-	if options == nil {
-		options = &renderer.FileOptions{}
+	var opts renderer.FileOptions
+	if len(options) > 0 {
+		opts = options[0]
 	}
-	if options.Name != "" {
-		name = options.Name
+	if opts.Name != "" {
+		name = opts.Name
 	}
-	if options.Header == nil {
-		options.Header = make(map[string]string, 1)
+	if opts.Header == nil {
+		opts.Header = make(map[string]string, 1)
 	}
-	options.Header["Content-Disposition"] = fmt.Sprintf("attachment; filename=\"%s\"", name)
-	c.SendFile(filePath, options)
+	opts.Header["Content-Disposition"] = fmt.Sprintf("attachment; filename=\"%s\"", name)
+	c.SendFile(filePath, opts)
 }
 
 // End signals to the server that all of the response headers and body have been
@@ -328,8 +334,7 @@ func (c *Context) Format(m map[string]Handle) {
 	} else if defaultHandler != nil {
 		defaultHandler(c)
 	} else {
-		status := http.StatusNotAcceptable
-		c.Next(&statusError{status, errors.New(http.StatusText(status))})
+		c.Next(internal.NewStatusCodeError(http.StatusNotAcceptable))
 	}
 }
 
@@ -387,7 +392,7 @@ func (c *Context) MustBindHeader(obj interface{}) {
 // See the binding package.
 func (c *Context) MustBindUri(obj interface{}) {
 	if err := c.BindUri(obj); err != nil {
-		panic(&statusError{http.StatusBadRequest, err})
+		panic(internal.NewStatusError(http.StatusBadRequest, err))
 	}
 }
 
@@ -396,7 +401,7 @@ func (c *Context) MustBindUri(obj interface{}) {
 // See the binding package.
 func (c *Context) MustBindWith(obj interface{}, b binding.Binding) {
 	if err := c.BindWith(obj, b); err != nil {
-		panic(&statusError{http.StatusBadRequest, err})
+		panic(internal.NewStatusError(http.StatusBadRequest, err))
 	}
 }
 

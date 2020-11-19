@@ -152,8 +152,8 @@ func defaultErrorHandler(v interface{}, c *Context) {
 		status := http.StatusInternalServerError
 		text := http.StatusText(status)
 		switch err := v.(type) {
-		case httpError:
-			text, status = err.Error(), err.status()
+		case HttpError:
+			text, status = err.Error(), err.Status()
 		case error:
 			text = err.Error()
 		case string:
@@ -199,6 +199,7 @@ func (r *Router) Use(params ...interface{}) {
 	if v, ok := params[0].(string); ok {
 		route = v
 	}
+	route = util.AddPrefixSlash(route)
 
 	var handle = params[length-1]
 
@@ -272,7 +273,7 @@ func (r *Router) mount(mountPoint string, router *Router) {
 
 	for _, v := range router.routes {
 		route := util.RouteJoin(mountPoint, v.route)
-		route = util.AddPrefixSlash(strings.TrimSuffix(route, "/"))
+		route = strings.TrimSuffix(route, "/")
 		node := &node{
 			method:         v.method,
 			route:          route,

@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/soongo/soon/internal"
+
 	"github.com/soongo/soon/util"
 )
 
@@ -29,17 +31,23 @@ const (
 
 	// DotfilesPolicyDeny deny dot files
 	DotfilesPolicyDeny
+
+	// IndexDisabled disable disable directory indexing
+	IndexDisabled string = "IndexDisabled"
 )
 
 var (
 	// ErrIsDir means the file is directory
-	ErrIsDir = errors.New("file is directory")
+	ErrIsDir = internal.NewStatusTextError(400, "file is directory")
+
+	// RangeNotSatisfiableError indicates the range header is not satisfiable
+	RangeNotSatisfiableError = internal.NewStatusTextError(400, "range not satisfiable")
 
 	// ErrForbidden represents forbidden error
-	ErrForbidden = errors.New(http.StatusText(http.StatusForbidden))
+	ErrForbidden = internal.NewStatusCodeError(403)
 
 	// ErrNotFound represents not found error
-	ErrNotFound = errors.New(http.StatusText(http.StatusNotFound))
+	ErrNotFound = internal.NewStatusCodeError(404)
 )
 
 // FileOptions contains all options for file renderer
@@ -66,12 +74,16 @@ type FileOptions struct {
 
 	// Enable or disable accepting ranged requests. Set true to disable it.
 	AcceptRangesDisabled bool
+
+	// Index sends the specified directory index file.
+	// Set to `IndexDisabled` to disable directory indexing.
+	Index string
 }
 
 // File contains the given path and options for file renderer.
 type File struct {
 	FilePath string
-	Options  *FileOptions
+	Options  FileOptions
 }
 
 // RenderHeader writes custom headers.
@@ -80,31 +92,37 @@ func (f *File) RenderHeader(_ http.ResponseWriter, _ *http.Request) {
 }
 
 // Render writes data with custom ContentType.
-func (f *File) Render(w http.ResponseWriter, _ *http.Request) error {
-	filePath := strings.Trim(f.FilePath, " ")
+func (f *File) Render(w http.ResponseWriter, req *http.Request) error {
+	filePath, options := strings.TrimSpace(f.FilePath), f.Options
 	if filePath == "" {
 		return errors.New("path argument is required")
 	}
 
-	options := f.Options
-	if options == nil {
-		options = &FileOptions{}
-	}
-
-	root := strings.Trim(options.Root, " ")
+	root := strings.TrimSpace(options.Root)
 	if root == "" && !filepath.IsAbs(filePath) {
 		return errors.New("path must be absolute or specify root")
 	}
 
-	absPath := util.EncodeURI(filepath.Join(root, filePath))
+	absPath := filepath.Join(root, filePath)
 	fileInfo, err := os.Stat(absPath)
-
 	if err != nil {
 		return err
 	}
 
 	if fileInfo.IsDir() {
-		return ErrIsDir
+		if options.Index == IndexDisabled {
+			return ErrIsDir
+		}
+
+		index := strings.TrimSpace(options.Index)
+		if index == "" {
+			index = "index.html"
+		}
+		absPath = filepath.Join(absPath, index)
+		fileInfo, err = os.Stat(absPath)
+		if err != nil {
+			return err
+		}
 	}
 
 	if strings.HasPrefix(filepath.Base(absPath), ".") {
@@ -133,7 +151,23 @@ func (f *File) Render(w http.ResponseWriter, _ *http.Request) error {
 	if err == nil {
 		defer file.Close()
 
-		util.SetContentType(w, filepath.Ext(filePath))
+		util.SetContentType(w, filepath.Ext(absPath))
+		if !options.AcceptRangesDisabled {
+			rangeHeader := strings.TrimSpace(req.Header.Get("range"))
+			if rangeHeader != "" {
+				ranges, err := util.RangeParser(fileInfo.Size(), rangeHeader, true)
+				if err != nil {
+					return RangeNotSatisfiableError
+				}
+				if ranges.Type == "bytes" && len(ranges.Ranges) == 1 {
+					start, end := ranges.Ranges[0].Start, ranges.Ranges[0].End
+					file.Seek(start, 0)
+					_, err = io.CopyN(w, file, end-start+1)
+					return err
+				}
+			}
+		}
+
 		_, err = io.Copy(w, file)
 	}
 

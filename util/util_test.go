@@ -11,9 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func rawBytesToStr(b []byte) string {
@@ -38,6 +37,12 @@ func generateRandomString(n int) string {
 		str.WriteString(testStrings[rand.Intn(len(testStrings))])
 	}
 	return str.String()
+}
+
+func TestDirname(t *testing.T) {
+	dirname, err := Dirname()
+	require.NoError(t, err)
+	assert.NotEqual(t, "", dirname)
 }
 
 func TestStringSlice_Contains(t *testing.T) {
@@ -244,6 +249,8 @@ func TestRouteJoin(t *testing.T) {
 	}{
 		{"", "", ""},
 		{"/", "/", "/"},
+		{"/", "//", "//"},
+		{"abc", "123", "abc123"},
 		{"abc", "/123", "abc/123"},
 		{"abc/", "/123", "abc/123"},
 		{"abc//", "123", "abc//123"},
@@ -290,5 +297,20 @@ func TestMax(t *testing.T) {
 
 	for _, tt := range tests {
 		assert.Equal(t, tt.expected, Max(tt.x, tt.y))
+	}
+}
+
+func TestIsFileExist(t *testing.T) {
+	tests := []struct {
+		path     string
+		expected bool
+	}{
+		{"", false},
+		{"util_test.go", true},
+		{"__not_exist_file__", false},
+	}
+
+	for _, tt := range tests {
+		assert.Equal(t, tt.expected, IsFileExist(tt.path))
 	}
 }

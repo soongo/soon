@@ -4,25 +4,6 @@
 
 package soon
 
-type httpError interface {
-	error
-	status() int
-}
+import "github.com/soongo/soon/internal"
 
-type statusError struct {
-	code int
-	err  error
-}
-
-var _ httpError = &statusError{}
-
-func (e *statusError) Error() string {
-	if e.err != nil {
-		return e.err.Error()
-	}
-	return ""
-}
-
-func (e *statusError) status() int {
-	return e.code
-}
+type HttpError internal.HttpError

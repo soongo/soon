@@ -203,7 +203,7 @@ func (r *Request) Is(types ...string) string {
 //
 // The "combine" argument can be set to `true` and overlapping & adjacent ranges
 // * will be combined into a single range.
-func (r *Request) Range(size int, combine bool) (util.Ranges, error) {
+func (r *Request) Range(size int64, combine bool) (util.Ranges, error) {
 	return util.RangeParser(size, r.Get("Range"), combine)
 }
 

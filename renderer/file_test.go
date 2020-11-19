@@ -7,19 +7,23 @@ package renderer
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http/httptest"
 	"os"
 	"path"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/soongo/soon/internal"
+
+	"github.com/soongo/soon/util"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestFile_RenderHeader(t *testing.T) {
 	w := httptest.NewRecorder()
-	renderer := File{"", nil}
+	renderer := File{"", FileOptions{}}
 	renderer.RenderHeader(w, nil)
 	assert.Equal(t, "", w.Header().Get("Content-Type"))
 }
@@ -34,7 +38,9 @@ func TestFile_Render(t *testing.T) {
 	tests := []struct {
 		name                string
 		filePath            string
-		options             *FileOptions
+		options             FileOptions
+		rangeHeader         string
+		expectedRange       *util.Range
 		expectedStatus      int
 		expectedContentType string
 		expectedError       error
@@ -42,6 +48,8 @@ func TestFile_Render(t *testing.T) {
 		{
 			"normal-1",
 			path.Join(pwd, "../README.md"),
+			FileOptions{},
+			"",
 			nil,
 			200,
 			"text/markdown; charset=UTF-8",
@@ -50,21 +58,25 @@ func TestFile_Render(t *testing.T) {
 		{
 			"normal-2",
 			path.Join(pwd, "../README.md"),
-			&FileOptions{
+			FileOptions{
 				MaxAge: &maxAge,
 				Header: map[string]string{
 					"Accept-Charset":  "utf-8",
 					"Accept-Language": "en;q=0.5, zh;q=0.8",
 				},
 			},
+			"",
+			nil,
 			200,
 			"text/markdown; charset=UTF-8",
 			nil,
 		},
-		{"empty-filepath", "", nil, 200, "", errors.New("")},
+		{"empty-filepath", "", FileOptions{}, "", nil, 200, "", errors.New("")},
 		{
 			"non-exist-file",
 			path.Join(pwd, "../xx.md"),
+			FileOptions{},
+			"",
 			nil,
 			200,
 			"",
@@ -73,25 +85,60 @@ func TestFile_Render(t *testing.T) {
 		{
 			"with-root-path",
 			"../README.md",
-			&FileOptions{Root: pwd, LastModifiedDisabled: true},
+			FileOptions{Root: pwd, LastModifiedDisabled: true},
+			"",
+			nil,
 			200,
 			"text/markdown; charset=UTF-8",
 			nil,
 		},
-		{"not-root-filepath", "../README.md", nil, 200, "", errors.New("")},
-		{"directory", pwd, nil, 200, "", ErrIsDir},
+		{"not-root-filepath", "../README.md", FileOptions{}, "", nil, 200, "", errors.New("")},
+		{
+			"index-not-exists",
+			pwd,
+			FileOptions{},
+			"",
+			nil,
+			200,
+			"",
+			errors.New(""),
+		},
+		{
+			"directory",
+			pwd,
+			FileOptions{Index: IndexDisabled},
+			"",
+			nil,
+			400,
+			"",
+			ErrIsDir,
+		},
+		{
+			"index-exists",
+			pwd,
+			FileOptions{Index: "file_test.go"},
+			"",
+			nil,
+			200,
+			"application/octet-stream",
+			nil,
+		},
 		{
 			"hidden-default",
 			path.Join(pwd, "../.travis.yml"),
+			FileOptions{},
+			"",
 			nil,
-			200,
+			404,
 			"",
 			ErrNotFound,
 		},
 		{
 			"hidden-allow",
 			path.Join(pwd, "../.travis.yml"),
-			&FileOptions{DotfilesPolicy: DotfilesPolicyAllow},
+			FileOptions{DotfilesPolicy: DotfilesPolicyAllow},
+			"",
+			nil,
 			200,
 			"text/yaml; charset=UTF-8",
 			nil,
@@ -99,10 +146,52 @@ func TestFile_Render(t *testing.T) {
 		{
 			"hidden-deny",
 			path.Join(pwd, "../.travis.yml"),
-			&FileOptions{DotfilesPolicy: DotfilesPolicyDeny},
-			200,
+			FileOptions{DotfilesPolicy: DotfilesPolicyDeny},
+			"",
+			nil,
+			403,
 			"",
 			ErrForbidden,
+		},
+		{
+			"range-0",
+			path.Join(pwd, "../README.md"),
+			FileOptions{},
+			"bytes=10-20",
+			&util.Range{Start: 10, End: 20},
+			200,
+			"text/markdown; charset=UTF-8",
+			nil,
+		},
+		{
+			"range-1",
+			path.Join(pwd, "../README.md"),
+			FileOptions{},
+			"bytes=10-20,21-30",
+			&util.Range{Start: 10, End: 30},
+			200,
+			"text/markdown; charset=UTF-8",
+			nil,
+		},
+		{
+			"range-2",
+			path.Join(pwd, "../README.md"),
+			FileOptions{},
+			"bytes=10-20,30-50",
+			nil,
+			200,
+			"text/markdown; charset=UTF-8",
+			nil,
+		},
+		{
+			"range-error",
+			path.Join(pwd, "../README.md"),
+			FileOptions{},
+			"bytes=",
+			nil,
+			400,
+			"text/markdown; charset=UTF-8",
+			RangeNotSatisfiableError,
 		},
 	}
 
@@ -110,55 +199,70 @@ func TestFile_Render(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			assert := assert.New(t)
 			renderer := File{tt.filePath, tt.options}
-			w := httptest.NewRecorder()
-			err := renderer.Render(w, nil)
+			w, req := httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil)
+			if tt.rangeHeader != "" {
+				req.Header.Set("range", tt.rangeHeader)
+			}
+			err = renderer.Render(w, req)
 			if tt.expectedError != nil {
 				assert.NotNil(err)
-				assert.Equal(tt.expectedStatus, w.Code)
+				if tt.expectedError.Error() != "" {
+					assert.Equal(tt.expectedError, err)
+				}
+				if httpErr, ok := tt.expectedError.(internal.HttpError); ok {
+					assert.Equal(tt.expectedStatus, httpErr.Status())
+				} else {
+					assert.Equal(tt.expectedStatus, w.Code)
+				}
 				assert.Equal("", w.Body.String())
 			} else {
-				fileInfo, fileContent := getFileContent(tt.filePath)
+				if tt.options.Index != "" {
+					tt.filePath = filepath.Join(tt.filePath, tt.options.Index)
+				}
+				fileInfo, fileContent := getFileContent(tt.filePath, tt.expectedRange)
 				lastModified := fileInfo.ModTime().UTC().Format(timeFormat)
 				assert.Equal(tt.expectedStatus, w.Code)
 				assert.Equal(fileContent, w.Body.String())
 				assert.Equal(tt.expectedContentType, w.Header().Get("Content-Type"))
-				if tt.options != nil {
-					if tt.options.MaxAge != nil {
-						cc := fmt.Sprintf("max-age=%.0f", maxAge.Seconds())
-						assert.Equal(cc, w.Header().Get("Cache-Control"))
-					}
-					if tt.options.Header != nil {
-						for k, v := range tt.options.Header {
-							assert.Equal(v, w.Header().Get(k))
-						}
-					}
-					expectedLastModified := lastModified
-					if tt.options.LastModifiedDisabled {
-						expectedLastModified = ""
-					}
-					assert.Equal(expectedLastModified, w.Header().Get("Last-Modified"))
-				} else {
-					assert.Equal(lastModified, w.Header().Get("Last-Modified"))
+				if tt.options.MaxAge != nil {
+					cc := fmt.Sprintf("max-age=%.0f", maxAge.Seconds())
+					assert.Equal(cc, w.Header().Get("Cache-Control"))
 				}
+				if tt.options.Header != nil {
+					for k, v := range tt.options.Header {
+						assert.Equal(v, w.Header().Get(k))
+					}
+				}
+				expectedLastModified := lastModified
+				if tt.options.LastModifiedDisabled {
+					expectedLastModified = ""
+				}
+				assert.Equal(expectedLastModified, w.Header().Get("Last-Modified"))
 			}
 		})
 	}
 }
 
-func getFileContent(p string) (os.FileInfo, string) {
+func getFileContent(p string, r *util.Range) (os.FileInfo, string) {
 	f, err := os.Open(p)
 	if err != nil {
 		panic(err)
 	}
 
 	defer f.Close()
-
-	bts, err := ioutil.ReadAll(f)
+	fileInfo, err := f.Stat()
 	if err != nil {
 		panic(err)
 	}
 
-	fileInfo, err := f.Stat()
+	start, size := int64(0), fileInfo.Size()
+	if r != nil {
+		start = r.Start
+		size = r.End - r.Start + 1
+	}
+
+	bts := make([]byte, size)
+	_, err = f.ReadAt(bts, start)
 	if err != nil {
 		panic(err)
 	}

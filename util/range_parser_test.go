@@ -15,7 +15,7 @@ import (
 func TestRangeParser(t *testing.T) {
 	tests := []struct {
 		desc           string
-		size           int
+		size           int64
 		str            string
 		combine        bool
 		expectedRanges Ranges
@@ -172,6 +172,19 @@ func TestRangeParser(t *testing.T) {
 					{Start: 149, End: 149, index: 0},
 					{Start: 20, End: 120, index: 1},
 					{Start: 0, End: 1, index: 2},
+				},
+			},
+		},
+		{
+			desc:    "should ignore space",
+			size:    150,
+			str:     "  bytes= 0-4,  90-99, 5-75, 100-199,  101-102  ",
+			combine: true,
+			expectedRanges: Ranges{
+				Type: "bytes",
+				Ranges: []*Range{
+					{Start: 0, End: 75, index: 0},
+					{Start: 90, End: 149, index: 1},
 				},
 			},
 		},
