@@ -14,7 +14,7 @@ type JSON struct {
 	Data interface{}
 }
 
-const jsonContentType = "application/json; charset=UTF-8"
+const jsonContentType = "application/json; charset=utf-8"
 
 // RenderHeader writes custom headers.
 func (j *JSON) RenderHeader(w http.ResponseWriter, _ *http.Request) {

@@ -13,7 +13,7 @@ import (
 
 const (
 	jsonpDefaultCallback = "_jsonp_callback_"
-	jsonpContentType     = "text/javascript; charset=UTF-8"
+	jsonpContentType     = "text/javascript; charset=utf-8"
 )
 
 // JSONP contains the given interface object.
@@ -37,8 +37,8 @@ func (j *JSONP) Render(w http.ResponseWriter, req *http.Request) error {
 	body, callback := string(bs), jsonpDefaultCallback
 	if req != nil {
 		if values, ok := req.URL.Query()["callback"]; ok {
-			if len(values) > 0 && strings.Trim(values[0], " ") != "" {
-				callback = strings.Trim(values[0], " ")
+			if len(values) > 0 && strings.TrimSpace(values[0]) != "" {
+				callback = strings.TrimSpace(values[0])
 			}
 		}
 	}

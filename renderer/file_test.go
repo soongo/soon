@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/soongo/soon/internal"
-
 	"github.com/soongo/soon/util"
 
 	"github.com/stretchr/testify/assert"
@@ -52,7 +51,7 @@ func TestFile_Render(t *testing.T) {
 			"",
 			nil,
 			200,
-			"text/markdown; charset=UTF-8",
+			"text/markdown; charset=utf-8",
 			nil,
 		},
 		{
@@ -68,7 +67,7 @@ func TestFile_Render(t *testing.T) {
 			"",
 			nil,
 			200,
-			"text/markdown; charset=UTF-8",
+			"text/markdown; charset=utf-8",
 			nil,
 		},
 		{"empty-filepath", "", FileOptions{}, "", nil, 200, "", errors.New("")},
@@ -83,14 +82,34 @@ func TestFile_Render(t *testing.T) {
 			errors.New(""),
 		},
 		{
-			"with-root-path",
+			"abs-path-will-ignore-root-specified",
+			path.Join(pwd, "../README.md"),
+			FileOptions{Root: "static"},
+			"",
+			nil,
+			200,
+			"text/markdown; charset=utf-8",
+			nil,
+		},
+		{
+			"with-abs-root-path",
 			"../README.md",
 			FileOptions{Root: pwd, LastModifiedDisabled: true},
 			"",
 			nil,
 			200,
-			"text/markdown; charset=UTF-8",
+			"text/markdown; charset=utf-8",
 			nil,
+		},
+		{
+			"with-non-abs-root-path",
+			"../README.md",
+			FileOptions{Root: ".", LastModifiedDisabled: true},
+			"",
+			nil,
+			200,
+			"",
+			errors.New(""),
 		},
 		{"not-root-filepath", "../README.md", FileOptions{}, "", nil, 200, "", errors.New("")},
 		{
@@ -131,7 +150,7 @@ func TestFile_Render(t *testing.T) {
 			nil,
 			404,
 			"",
-			ErrNotFound,
+			internal.ErrNotFound,
 		},
 		{
 			"hidden-allow",
@@ -140,7 +159,7 @@ func TestFile_Render(t *testing.T) {
 			"",
 			nil,
 			200,
-			"text/yaml; charset=UTF-8",
+			"text/yaml; charset=utf-8",
 			nil,
 		},
 		{
@@ -151,7 +170,7 @@ func TestFile_Render(t *testing.T) {
 			nil,
 			403,
 			"",
-			ErrForbidden,
+			internal.ErrForbidden,
 		},
 		{
 			"range-0",
@@ -160,7 +179,7 @@ func TestFile_Render(t *testing.T) {
 			"bytes=10-20",
 			&util.Range{Start: 10, End: 20},
 			200,
-			"text/markdown; charset=UTF-8",
+			"text/markdown; charset=utf-8",
 			nil,
 		},
 		{
@@ -170,7 +189,7 @@ func TestFile_Render(t *testing.T) {
 			"bytes=10-20,21-30",
 			&util.Range{Start: 10, End: 30},
 			200,
-			"text/markdown; charset=UTF-8",
+			"text/markdown; charset=utf-8",
 			nil,
 		},
 		{
@@ -180,7 +199,17 @@ func TestFile_Render(t *testing.T) {
 			"bytes=10-20,30-50",
 			nil,
 			200,
-			"text/markdown; charset=UTF-8",
+			"text/markdown; charset=utf-8",
+			nil,
+		},
+		{
+			"range-3",
+			path.Join(pwd, "../README.md"),
+			FileOptions{AcceptRangesDisabled: true},
+			"bytes=10-20",
+			nil,
+			200,
+			"text/markdown; charset=utf-8",
 			nil,
 		},
 		{
@@ -190,7 +219,7 @@ func TestFile_Render(t *testing.T) {
 			"bytes=",
 			nil,
 			400,
-			"text/markdown; charset=UTF-8",
+			"text/markdown; charset=utf-8",
 			RangeNotSatisfiableError,
 		},
 	}

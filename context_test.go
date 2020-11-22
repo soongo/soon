@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/soongo/soon/internal"
+
 	"github.com/soongo/soon/binding"
 	"github.com/soongo/soon/renderer"
 	"github.com/soongo/soon/util"
@@ -29,10 +31,10 @@ import (
 var (
 	timeFormat   = http.TimeFormat
 	dotRegexp    = regexp.MustCompile("\\s*,\\s*")
-	plainType    = "text/plain; charset=UTF-8"
-	htmlType     = "text/html; charset=UTF-8"
-	jsonType     = "application/json; charset=UTF-8"
-	jsonpType    = "text/javascript; charset=UTF-8"
+	plainType    = "text/plain; charset=utf-8"
+	htmlType     = "text/html; charset=utf-8"
+	jsonType     = "application/json; charset=utf-8"
+	jsonpType    = "text/javascript; charset=utf-8"
 	emptyRequest = httptest.NewRequest("GET", "/", nil)
 )
 
@@ -318,9 +320,9 @@ func TestContext_Get(t *testing.T) {
 		expected string
 	}{
 		{"Content-Type", "application/json", jsonType},
-		{"Content-Type", "text/*", "text/*; charset=UTF-8"},
+		{"Content-Type", "text/*", "text/*; charset=utf-8"},
 		{"Content-Type", "application/octet-stream", "application/octet-stream"},
-		{"Content-Type", []string{"text/*", "application/json"}, "text/*; charset=UTF-8"},
+		{"Content-Type", []string{"text/*", "application/json"}, "text/*; charset=utf-8"},
 	}
 
 	assert := assert.New(t)
@@ -466,7 +468,7 @@ func TestContext_Location(t *testing.T) {
 	for _, tt := range tests {
 		c := NewContext(emptyRequest, httptest.NewRecorder())
 		if tt.expected == "" {
-			tt.expected = util.EncodeURI(strings.Trim(tt.location, " "))
+			tt.expected = util.EncodeURI(strings.TrimSpace(tt.location))
 		}
 		if tt.referrer != "" {
 			c.Set("Referrer", tt.referrer)
@@ -597,7 +599,7 @@ func TestContext_SendFile(t *testing.T) {
 			path.Join(pwd, "README.md"),
 			renderer.FileOptions{},
 			200,
-			"text/markdown; charset=UTF-8",
+			"text/markdown; charset=utf-8",
 			nil,
 			nil,
 		},
@@ -612,7 +614,7 @@ func TestContext_SendFile(t *testing.T) {
 				},
 			},
 			200,
-			"text/markdown; charset=UTF-8",
+			"text/markdown; charset=utf-8",
 			nil,
 			nil,
 		},
@@ -622,7 +624,7 @@ func TestContext_SendFile(t *testing.T) {
 			"README.md",
 			renderer.FileOptions{Root: pwd, LastModifiedDisabled: true},
 			200,
-			"text/markdown; charset=UTF-8",
+			"text/markdown; charset=utf-8",
 			nil,
 			nil,
 		},
@@ -641,7 +643,7 @@ func TestContext_SendFile(t *testing.T) {
 			pwd,
 			renderer.FileOptions{Index: "README.md"},
 			200,
-			"text/markdown; charset=UTF-8",
+			"text/markdown; charset=utf-8",
 			nil,
 			nil,
 		},
@@ -651,7 +653,7 @@ func TestContext_SendFile(t *testing.T) {
 			renderer.FileOptions{},
 			404,
 			"",
-			renderer.ErrNotFound,
+			internal.ErrNotFound,
 			deferFn,
 		},
 		{
@@ -659,7 +661,7 @@ func TestContext_SendFile(t *testing.T) {
 			path.Join(pwd, ".travis.yml"),
 			renderer.FileOptions{DotfilesPolicy: renderer.DotfilesPolicyAllow},
 			200,
-			"text/yaml; charset=UTF-8",
+			"text/yaml; charset=utf-8",
 			nil,
 			nil,
 		},
@@ -669,7 +671,7 @@ func TestContext_SendFile(t *testing.T) {
 			renderer.FileOptions{DotfilesPolicy: renderer.DotfilesPolicyDeny},
 			403,
 			"",
-			renderer.ErrForbidden,
+			internal.ErrForbidden,
 			deferFn,
 		},
 	}
@@ -874,7 +876,7 @@ func TestContext_Format(t *testing.T) {
 		path := "/" + strconv.Itoa(i)
 		h := http.Header{"Accept": dotRegexp.Split(tt.accept, -1)}
 		statusCode, _, body, err := request(http.MethodGet, server.URL+path, h)
-		body = strings.Trim(body, "\n")
+		body = strings.TrimSpace(body)
 		assert.Nil(err)
 		assert.Equal(tt.expectedStatus, statusCode)
 		assert.Equal(tt.expectedBody, body)

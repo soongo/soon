@@ -26,11 +26,11 @@ func TestLookupMimeType(t *testing.T) {
 
 func TestLookupCharset(t *testing.T) {
 	tests := map[string]string{
-		"text/html":                "UTF-8",
-		"text/plain":               "UTF-8",
-		"text/xxx":                 "UTF-8",
-		"application/javascript":   "UTF-8",
-		"application/json":         "UTF-8",
+		"text/html":                "utf-8",
+		"text/plain":               "utf-8",
+		"text/xxx":                 "utf-8",
+		"application/javascript":   "utf-8",
+		"application/json":         "utf-8",
 		"application/octet-stream": "",
 		"application/xxx":          "",
 		"image/png":                "",

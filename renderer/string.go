@@ -14,7 +14,7 @@ type String struct {
 	Data string
 }
 
-const plainContentType = "text/plain; charset=UTF-8"
+const plainContentType = "text/plain; charset=utf-8"
 
 // RenderHeader writes custom headers.
 func (s *String) RenderHeader(w http.ResponseWriter, _ *http.Request) {

@@ -88,7 +88,7 @@ func SetHeader(w http.ResponseWriter, value ...interface{}) {
 // determined by LookupMimeType() for the specified type. If type contains
 // the “/” character, then it sets the Content-Type to type.
 func SetContentType(w http.ResponseWriter, s string) {
-	k, s := "Content-Type", strings.Trim(s, " ")
+	k, s := "Content-Type", strings.TrimSpace(s)
 	if strings.Contains(s, "/") {
 		SetHeader(w, k, s)
 	} else {

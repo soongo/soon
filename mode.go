@@ -51,7 +51,7 @@ func init() {
 
 // SetMode sets soon mode according to input string.
 func SetMode(value string) {
-	value = strings.Trim(value, " ")
+	value = strings.TrimSpace(value)
 	switch value {
 	case ReleaseMode, "":
 		value = ReleaseMode

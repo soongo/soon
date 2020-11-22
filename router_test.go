@@ -31,9 +31,9 @@ type test struct {
 	errorHandle       ErrorHandle
 }
 
-const (
+var (
 	body200 = `{"alive": true}`
-	body404 = "404 page not found"
+	body404 = http.StatusText(404)
 )
 
 var methods = []string{

@@ -15,10 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/soongo/soon/internal"
-
 	"github.com/soongo/soon/binding"
-
+	"github.com/soongo/soon/internal"
 	"github.com/soongo/soon/renderer"
 	"github.com/soongo/soon/util"
 )
@@ -175,7 +173,7 @@ func (c *Context) Type(s string) {
 
 // Links sets Link header field with the given `links`.
 func (c *Context) Links(links map[string]string) {
-	link := strings.Trim(c.Get("Link"), " ")
+	link := strings.TrimSpace(c.Get("Link"))
 	if link != "" {
 		link += ", "
 	}
@@ -196,7 +194,7 @@ func (c *Context) Links(links map[string]string) {
 // The given `url` can also be "back", which redirects
 // to the _Referrer_ or _Referer_ headers or "/".
 func (c *Context) Location(url string) {
-	url = strings.Trim(url, " ")
+	url = strings.TrimSpace(url)
 	if url == "back" {
 		url = c.Get("Referrer")
 		if url == "" {
@@ -238,42 +236,6 @@ func (c *Context) ClearCookie(cookie *http.Cookie) {
 		Path:    p,
 		Expires: time.Unix(0, 0),
 	})
-}
-
-// SendFile transfers the file at the given path. Sets the Content-Type
-// response HTTP header field based on the filename’s extension.
-// Unless the root option is set in the options object, path must be an
-// absolute path to the file.
-func (c *Context) SendFile(filePath string, options ...renderer.FileOptions) {
-	var opts renderer.FileOptions
-	if len(options) > 0 {
-		opts = options[0]
-	}
-	c.Render(&renderer.File{FilePath: filePath, Options: opts})
-}
-
-// Download transfers the file at path as an “attachment”. Typically, browsers will
-// prompt the user for download. By default, the Content-Disposition header
-// “filename=” parameter is path (this typically appears in the browser dialog).
-// Override this default with the options.Name parameter.
-//
-// This method uses c.SendFile() to transfer the file. The optional options
-// argument passes through to the underlying c.SendFile() call, and takes the
-// exact same parameters.
-func (c *Context) Download(filePath string, options ...renderer.FileOptions) {
-	name := filepath.Base(filePath)
-	var opts renderer.FileOptions
-	if len(options) > 0 {
-		opts = options[0]
-	}
-	if opts.Name != "" {
-		name = opts.Name
-	}
-	if opts.Header == nil {
-		opts.Header = make(map[string]string, 1)
-	}
-	opts.Header["Content-Disposition"] = fmt.Sprintf("attachment; filename=\"%s\"", name)
-	c.SendFile(filePath, opts)
 }
 
 // End signals to the server that all of the response headers and body have been
@@ -448,6 +410,42 @@ func (c *Context) Json(v interface{}) {
 // to c.Json(), except that it opts-in to JSONP callback support.
 func (c *Context) Jsonp(v interface{}) {
 	c.Render(&renderer.JSONP{Data: v})
+}
+
+// SendFile transfers the file at the given path. Sets the Content-Type
+// response HTTP header field based on the filename’s extension.
+// Unless the root option is set in the options object, path must be an
+// absolute path to the file.
+func (c *Context) SendFile(filePath string, options ...renderer.FileOptions) {
+	var opts renderer.FileOptions
+	if len(options) > 0 {
+		opts = options[0]
+	}
+	c.Render(&renderer.File{FilePath: filePath, Options: opts})
+}
+
+// Download transfers the file at path as an “attachment”. Typically, browsers will
+// prompt the user for download. By default, the Content-Disposition header
+// “filename=” parameter is path (this typically appears in the browser dialog).
+// Override this default with the options.Name parameter.
+//
+// This method uses c.SendFile() to transfer the file. The optional options
+// argument passes through to the underlying c.SendFile() call, and takes the
+// exact same parameters.
+func (c *Context) Download(filePath string, options ...renderer.FileOptions) {
+	name := filepath.Base(filePath)
+	var opts renderer.FileOptions
+	if len(options) > 0 {
+		opts = options[0]
+	}
+	if opts.Name != "" {
+		name = opts.Name
+	}
+	if opts.Header == nil {
+		opts.Header = make(map[string]string, 1)
+	}
+	opts.Header["Content-Disposition"] = fmt.Sprintf("attachment; filename=\"%s\"", name)
+	c.SendFile(filePath, opts)
 }
 
 // Redirect to the given `location` with `status`.

@@ -19,6 +19,16 @@ type statusError struct {
 	err  error
 }
 
+var (
+	_ HttpError = &statusError{}
+
+	// ErrForbidden represents forbidden error
+	ErrForbidden = NewStatusCodeError(403)
+
+	// ErrNotFound represents not found error
+	ErrNotFound = NewStatusCodeError(404)
+)
+
 // NewStatusError creates *statusError by code and error
 func NewStatusError(code int, err error) *statusError {
 	return &statusError{code, err}

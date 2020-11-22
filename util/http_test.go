@@ -18,8 +18,8 @@ func TestAddHeader(t *testing.T) {
 		v        interface{}
 		expected []string
 	}{
-		{"Content-Type", "text/html", []string{"text/html; charset=UTF-8"}},
-		{"Content-Type", "text/html; charset=UTF-7", []string{"text/html; charset=UTF-7"}},
+		{"Content-Type", "text/html", []string{"text/html; charset=utf-8"}},
+		{"Content-Type", "text/html; charset=utf-7", []string{"text/html; charset=utf-7"}},
 		{"Content-Type", "application/octet-stream", []string{"application/octet-stream"}},
 		{
 			"Content-Type",
@@ -27,13 +27,13 @@ func TestAddHeader(t *testing.T) {
 				"text/html",
 				"application/octet-stream",
 				"application/json",
-				"text/*; charset=UTF-7",
+				"text/*; charset=utf-7",
 			},
 			[]string{
-				"text/html; charset=UTF-8",
+				"text/html; charset=utf-8",
 				"application/octet-stream",
-				"application/json; charset=UTF-8",
-				"text/*; charset=UTF-7",
+				"application/json; charset=utf-8",
+				"text/*; charset=utf-7",
 			},
 		},
 	}
@@ -52,8 +52,8 @@ func TestSetHeader(t *testing.T) {
 		v        interface{}
 		expected interface{}
 	}{
-		{k, "text/html", http.Header{k: []string{"text/html; charset=UTF-8"}}},
-		{k, "text/html; charset=UTF-7", http.Header{k: []string{"text/html; charset=UTF-7"}}},
+		{k, "text/html", http.Header{k: []string{"text/html; charset=utf-8"}}},
+		{k, "text/html; charset=utf-7", http.Header{k: []string{"text/html; charset=utf-7"}}},
 		{k, "application/octet-stream", http.Header{k: []string{"application/octet-stream"}}},
 		{
 			k,
@@ -61,13 +61,13 @@ func TestSetHeader(t *testing.T) {
 				"text/html",
 				"application/octet-stream",
 				"application/json",
-				"text/*; charset=UTF-7",
+				"text/*; charset=utf-7",
 			},
 			http.Header{k: []string{
-				"text/html; charset=UTF-8",
+				"text/html; charset=utf-8",
 				"application/octet-stream",
-				"application/json; charset=UTF-8",
-				"text/*; charset=UTF-7",
+				"application/json; charset=utf-8",
+				"text/*; charset=utf-7",
 			}},
 		},
 		{
@@ -77,7 +77,7 @@ func TestSetHeader(t *testing.T) {
 				"X-Custom": "custom",
 			},
 			http.Header{
-				k:          []string{"text/html; charset=UTF-8"},
+				k:          []string{"text/html; charset=utf-8"},
 				"X-Custom": []string{"custom"},
 			},
 		},
@@ -101,8 +101,8 @@ func TestSetContentType(t *testing.T) {
 		contentType         string
 		expectedContentType string
 	}{
-		{"normal-0", "html", "text/html; charset=UTF-8"},
-		{"normal-1", "index.html", "text/html; charset=UTF-8"},
+		{"normal-0", "html", "text/html; charset=utf-8"},
+		{"normal-1", "index.html", "text/html; charset=utf-8"},
 		{"slash-0", "image/png", "image/png"},
 		{"slash-1", "/", "/"},
 		{"empty", "", "application/octet-stream"},

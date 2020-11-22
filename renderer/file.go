@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/soongo/soon/internal"
-
 	"github.com/soongo/soon/util"
 )
 
@@ -42,12 +41,6 @@ var (
 
 	// RangeNotSatisfiableError indicates the range header is not satisfiable
 	RangeNotSatisfiableError = internal.NewStatusTextError(400, "range not satisfiable")
-
-	// ErrForbidden represents forbidden error
-	ErrForbidden = internal.NewStatusCodeError(403)
-
-	// ErrNotFound represents not found error
-	ErrNotFound = internal.NewStatusCodeError(404)
 )
 
 // FileOptions contains all options for file renderer
@@ -93,17 +86,26 @@ func (f *File) RenderHeader(_ http.ResponseWriter, _ *http.Request) {
 
 // Render writes data with custom ContentType.
 func (f *File) Render(w http.ResponseWriter, req *http.Request) error {
-	filePath, options := strings.TrimSpace(f.FilePath), f.Options
-	if filePath == "" {
+	absPath, options := strings.TrimSpace(f.FilePath), f.Options
+	if absPath == "" {
 		return errors.New("path argument is required")
 	}
 
-	root := strings.TrimSpace(options.Root)
-	if root == "" && !filepath.IsAbs(filePath) {
-		return errors.New("path must be absolute or specify root")
+	if !filepath.IsAbs(absPath) {
+		root := strings.TrimSpace(options.Root)
+		if root == "" {
+			return errors.New("path must be absolute or specify root")
+		} else if !filepath.IsAbs(root) {
+			return errors.New("root must be absolute")
+		}
+
+		absPath = filepath.Join(root, absPath)
 	}
 
-	absPath := filepath.Join(root, filePath)
+	if !util.IsFileExist(absPath) {
+		return internal.ErrNotFound
+	}
+
 	fileInfo, err := os.Stat(absPath)
 	if err != nil {
 		return err
@@ -118,7 +120,12 @@ func (f *File) Render(w http.ResponseWriter, req *http.Request) error {
 		if index == "" {
 			index = "index.html"
 		}
+
 		absPath = filepath.Join(absPath, index)
+		if !util.IsFileExist(absPath) {
+			return internal.ErrNotFound
+		}
+
 		fileInfo, err = os.Stat(absPath)
 		if err != nil {
 			return err
@@ -127,10 +134,10 @@ func (f *File) Render(w http.ResponseWriter, req *http.Request) error {
 
 	if strings.HasPrefix(filepath.Base(absPath), ".") {
 		if options.DotfilesPolicy == DotfilesPolicyIgnore {
-			return ErrNotFound
+			return internal.ErrNotFound
 		}
 		if options.DotfilesPolicy == DotfilesPolicyDeny {
-			return ErrForbidden
+			return internal.ErrForbidden
 		}
 	}
 

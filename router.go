@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/dlclark/regexp2"
+	"github.com/soongo/soon/internal"
 	"github.com/soongo/soon/util"
 
 	pathToRegexp "github.com/soongo/path-to-regexp"
@@ -369,7 +370,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			if len(v) > 0 && v[0] != nil {
 				defaultErrorHandler(v[0], c)
 			} else {
-				http.NotFound(w, req)
+				defaultErrorHandler(internal.ErrNotFound, c)
 			}
 			return
 		}

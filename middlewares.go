@@ -40,13 +40,6 @@ func Static(root string, options ...renderer.FileOptions) Handle {
 			return
 		}
 
-		// ignore root option in FileOptions
-		var opts renderer.FileOptions
-		if len(options) > 0 {
-			opts = options[0]
-			opts.Root = ""
-		}
-
-		c.SendFile(absPath, opts)
+		c.SendFile(absPath, options...)
 	}
 }

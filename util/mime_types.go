@@ -1149,7 +1149,7 @@ func LookupMimeType(s string) string {
 // LookupCharset lookups the charset of MIME Type.
 func LookupCharset(mimeType string) string {
 	if charsetUTF8Regexp.MatchString(mimeType) {
-		return "UTF-8"
+		return "utf-8"
 	}
 	return ""
 }
