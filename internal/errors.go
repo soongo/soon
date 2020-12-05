@@ -56,3 +56,8 @@ func (e *statusError) Error() string {
 func (e *statusError) Status() int {
 	return e.code
 }
+
+// Unwrap returns the wrapped error
+func (e *statusError) Unwrap() error {
+	return e.err
+}

@@ -14,6 +14,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/soongo/soon/renderer"
 	"github.com/soongo/soon/util"
 
@@ -266,4 +268,22 @@ func TestStatic(t *testing.T) {
 			assert.Equal(t, strings.TrimSpace(content), strings.TrimSpace(body))
 		})
 	}
+}
+
+func TestDevLog(t *testing.T) {
+	router := NewRouter()
+	router.Use(DevLog())
+
+	router.GET("/500", func(c *Context) {
+		panic(http.StatusInternalServerError)
+	})
+
+	server := httptest.NewServer(router)
+	defer server.Close()
+	code, _, _, err := request("GET", server.URL+"/", nil)
+	require.NoError(t, err)
+	assert.Equal(t, 404, code)
+	code, _, _, err = request("GET", server.URL+"/500", nil)
+	require.NoError(t, err)
+	assert.Equal(t, 500, code)
 }

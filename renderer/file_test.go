@@ -286,8 +286,7 @@ func getFileContent(p string, r *util.Range) (os.FileInfo, string) {
 
 	start, size := int64(0), fileInfo.Size()
 	if r != nil {
-		start = r.Start
-		size = r.End - r.Start + 1
+		start, size = r.Start, r.End-r.Start+1
 	}
 
 	bts := make([]byte, size)

@@ -18,7 +18,9 @@ const plainContentType = "text/plain; charset=utf-8"
 
 // RenderHeader writes custom headers.
 func (s *String) RenderHeader(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", plainContentType)
+	if w.Header().Get("Content-Type") == "" {
+		w.Header().Set("Content-Type", plainContentType)
+	}
 }
 
 // Render writes data with custom ContentType.

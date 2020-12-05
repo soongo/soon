@@ -21,6 +21,10 @@ func TestString_RenderHeader(t *testing.T) {
 	renderer := String{"hi"}
 	renderer.RenderHeader(w, nil)
 	assert.Equal(t, plainContentType, w.Header().Get("Content-Type"))
+
+	w.Header().Set("Content-Type", jsonContentType)
+	renderer.RenderHeader(w, nil)
+	assert.Equal(t, jsonContentType, w.Header().Get("Content-Type"))
 }
 
 func TestString_Render(t *testing.T) {

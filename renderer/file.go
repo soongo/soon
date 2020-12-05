@@ -102,13 +102,9 @@ func (f *File) Render(w http.ResponseWriter, req *http.Request) error {
 		absPath = filepath.Join(root, absPath)
 	}
 
-	if !util.IsFileExist(absPath) {
-		return internal.ErrNotFound
-	}
-
 	fileInfo, err := os.Stat(absPath)
 	if err != nil {
-		return err
+		return internal.ErrNotFound
 	}
 
 	if fileInfo.IsDir() {
@@ -122,13 +118,9 @@ func (f *File) Render(w http.ResponseWriter, req *http.Request) error {
 		}
 
 		absPath = filepath.Join(absPath, index)
-		if !util.IsFileExist(absPath) {
-			return internal.ErrNotFound
-		}
-
 		fileInfo, err = os.Stat(absPath)
 		if err != nil {
-			return err
+			return internal.ErrNotFound
 		}
 	}
 

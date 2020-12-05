@@ -31,5 +31,8 @@ func TestStatusError_Error(t *testing.T) {
 	for _, tt := range tests {
 		assert.Equal(t, tt.expectedCode, tt.statusError.Status())
 		assert.Equal(t, tt.expectedErrorStr, tt.statusError.Error())
+		if tt.expectedErrorStr != "" {
+			assert.NotNil(t, tt.statusError.Unwrap())
+		}
 	}
 }
