@@ -399,6 +399,12 @@ func (c *Context) String(s string) {
 	c.Render(&renderer.String{Data: s})
 }
 
+// Html sends a html response.
+func (c *Context) Html(s string) {
+	c.Set("Content-Type", "text/html; charset=utf-8")
+	c.Render(&renderer.String{Data: s})
+}
+
 // Json sends a JSON response.
 // This method sends a response (with the correct content-type) that is
 // the parameter converted to a JSON string.

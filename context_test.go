@@ -1135,16 +1135,41 @@ func TestContext_BindBodyWith(t *testing.T) {
 func TestContext_String(t *testing.T) {
 	tests := []struct {
 		s                   string
+		contentType         string
 		expectedStatus      int
 		expectedContentType string
 	}{
-		{"foo", 200, plainType},
+		{"foo", "", 200, plainType},
+		{"foo", "text/xml; charset=utf-8", 200, "text/xml; charset=utf-8"},
 	}
 
 	assert := assert.New(t)
 	for _, tt := range tests {
 		c := NewContext(emptyRequest, httptest.NewRecorder())
+		if tt.contentType != "" {
+			c.Set("content-type", "text/xml")
+		}
 		c.String(tt.s)
+		w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
+		assert.Equal(tt.expectedStatus, w.Code)
+		assert.Equal(tt.expectedContentType, c.Get("Content-Type"))
+		assert.Equal(tt.s, w.Body.String())
+	}
+}
+
+func TestContext_Html(t *testing.T) {
+	tests := []struct {
+		s                   string
+		expectedStatus      int
+		expectedContentType string
+	}{
+		{"foo", 200, "text/html; charset=utf-8"},
+	}
+
+	assert := assert.New(t)
+	for _, tt := range tests {
+		c := NewContext(emptyRequest, httptest.NewRecorder())
+		c.Html(tt.s)
 		w := c.response.ResponseWriter.(*httptest.ResponseRecorder)
 		assert.Equal(tt.expectedStatus, w.Code)
 		assert.Equal(tt.expectedContentType, c.Get("Content-Type"))
