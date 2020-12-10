@@ -649,7 +649,7 @@ func TestContext_SendFile(t *testing.T) {
 		},
 		{
 			"hidden-default",
-			path.Join(pwd, ".travis.yml"),
+			path.Join(pwd, ".testkeep.yml"),
 			renderer.FileOptions{},
 			404,
 			"",
@@ -658,7 +658,7 @@ func TestContext_SendFile(t *testing.T) {
 		},
 		{
 			"hidden-allow",
-			path.Join(pwd, ".travis.yml"),
+			path.Join(pwd, ".testkeep.yml"),
 			renderer.FileOptions{DotfilesPolicy: renderer.DotfilesPolicyAllow},
 			200,
 			"text/yaml; charset=utf-8",
@@ -667,7 +667,7 @@ func TestContext_SendFile(t *testing.T) {
 		},
 		{
 			"hidden-deny",
-			path.Join(pwd, ".travis.yml"),
+			path.Join(pwd, ".testkeep.yml"),
 			renderer.FileOptions{DotfilesPolicy: renderer.DotfilesPolicyDeny},
 			403,
 			"",

@@ -1,6 +1,6 @@
 # Soon Web Framework
 
-[![Build Status](https://travis-ci.org/soongo/soon.svg)](https://travis-ci.org/soongo/soon)
+[![Build Status](https://github.com/soongo/soon/workflows/build/badge.svg?branch=master)](https://github.com/soongo/soon/actions?query=workflow%3Abuild)
 [![codecov](https://codecov.io/gh/soongo/soon/branch/master/graph/badge.svg)](https://codecov.io/gh/soongo/soon)
 [![Go Report Card](https://goreportcard.com/badge/github.com/soongo/soon)](https://goreportcard.com/report/github.com/soongo/soon)
 [![GoDoc](https://godoc.org/github.com/soongo/soon?status.svg)](https://godoc.org/github.com/soongo/soon)

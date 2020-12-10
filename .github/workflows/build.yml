@@ -1,0 +1,52 @@
+name: build
+
+on: [push, pull_request]
+
+jobs:
+
+  build:
+    name: Build
+    runs-on: ubuntu-18.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - go-version: 1.11.x
+            GO111MODULE: "on"
+          - go-version: 1.12.x
+            GO111MODULE: "on"
+          - go-version: 1.13.x
+          - go-version: 1.14.x
+          - go-version: 1.15.x
+          - go-version: 1.x
+    steps:
+
+      - name: Set up Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: Get dependencies
+        env:
+          GO111MODULE: ${{ matrix.GO111MODULE }}
+        run: |
+          go get -v -t -d ./...
+          if [ -f Gopkg.toml ]; then
+              curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
+              dep ensure
+          fi
+
+      - name: Pre check
+        run: |
+          make vet
+          make fmt-check
+          make misspell-check
+
+      - name: Test
+        run: make test
+
+      - name: Push tests result to codecov.io
+        run: bash <(curl -s https://codecov.io/bash)

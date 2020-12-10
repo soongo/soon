@@ -144,7 +144,7 @@ func TestFile_Render(t *testing.T) {
 		},
 		{
 			"hidden-default",
-			path.Join(pwd, "../.travis.yml"),
+			path.Join(pwd, "../.testkeep.yml"),
 			FileOptions{},
 			"",
 			nil,
@@ -154,7 +154,7 @@ func TestFile_Render(t *testing.T) {
 		},
 		{
 			"hidden-allow",
-			path.Join(pwd, "../.travis.yml"),
+			path.Join(pwd, "../.testkeep.yml"),
 			FileOptions{DotfilesPolicy: DotfilesPolicyAllow},
 			"",
 			nil,
@@ -164,7 +164,7 @@ func TestFile_Render(t *testing.T) {
 		},
 		{
 			"hidden-deny",
-			path.Join(pwd, "../.travis.yml"),
+			path.Join(pwd, "../.testkeep.yml"),
 			FileOptions{DotfilesPolicy: DotfilesPolicyDeny},
 			"",
 			nil,
